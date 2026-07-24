@@ -189,6 +189,33 @@ VENUES = [
         "supports_qr_proof": False,
     },
     {
+        # Large L-shaped campus. The east tip of the south arm is inside the
+        # polygon but ~385 m from the centroid, so a centroid-only candidate
+        # prefilter at 150 m would wrongly drop it. Presence candidate
+        # resolution must use ST_DWithin against the boundary.
+        "slug": "harbor-yards-campus",
+        "name": "Harbor Yards Campus",
+        "category": "warehouse",
+        "description": "Synthetic large irregular venue for boundary-distance tests.",
+        "street_address": "900 Invented Dockside Way",
+        "music_tags": ["techno", "house"],
+        "experience_tags": ["dance", "live_set"],
+        "price_band": 2,
+        "minimum_age": 21,
+        "centroid": (-118.3985, 34.0215),
+        "polygon": [
+            (-118.4000, 34.0200),
+            (-118.3940, 34.0200),
+            (-118.3940, 34.0210),
+            (-118.3980, 34.0210),
+            (-118.3980, 34.0240),
+            (-118.4000, 34.0240),
+            (-118.4000, 34.0200),
+        ],
+        "supports_qr_proof": False,
+        "max_gps_accuracy_m": 60,
+    },
+    {
         "slug": "draft-whisper",
         "name": "Draft Whisper",
         "category": "bar",

@@ -1,15 +1,19 @@
 import { useQuery } from "@tanstack/react-query";
-import { ActivityIndicator, FlatList, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 
+import { useAuth } from "@/auth/AuthProvider";
+import { useLocalLogin } from "@/auth/localAuth";
 import { fetchMapVenues } from "@/features/discover/api";
 import { VenueCardView } from "@/features/discover/VenueCard";
 import { getMapProvider } from "@/maps/MapProvider";
 
-/** Synthetic LA default for local Discover (no live GPS in Phase 1 UI). */
+/** Synthetic LA default for local Discover (no live GPS required for map list). */
 const DEFAULT_CENTER = { latitude: 34.0955, longitude: -118.344 };
 const DEFAULT_RADIUS_M = 8000;
 
 export function DiscoverScreen() {
+  const auth = useAuth();
+  const login = useLocalLogin();
   const map = getMapProvider();
   const venuesQuery = useQuery({
     queryKey: ["map-venues", DEFAULT_CENTER, DEFAULT_RADIUS_M],
@@ -20,6 +24,7 @@ export function DiscoverScreen() {
         radius_m: DEFAULT_RADIUS_M,
         limit: 30,
       }),
+    enabled: auth.status === "authenticated",
   });
 
   const pins =
@@ -46,25 +51,42 @@ export function DiscoverScreen() {
           : "Development map provider · venue list near synthetic LA"}
       </Text>
 
-      {venuesQuery.isLoading ? <ActivityIndicator color="#9aa6bf" /> : null}
+      {auth.status === "initializing" ? <ActivityIndicator color="#9aa6bf" /> : null}
+
+      {auth.status === "unauthenticated" ? (
+        <View style={styles.signedOut}>
+          <Text style={styles.help}>Sign in to load nearby venues.</Text>
+          <Pressable style={styles.button} onPress={() => void login()}>
+            <Text style={styles.buttonText}>Sign in (local JWT)</Text>
+          </Pressable>
+        </View>
+      ) : null}
+
+      {auth.status === "authenticated" && venuesQuery.isLoading ? (
+        <ActivityIndicator color="#9aa6bf" />
+      ) : null}
       {venuesQuery.error ? (
         <Text style={styles.error}>{(venuesQuery.error as Error).message}</Text>
       ) : null}
 
-      <FlatList
-        data={venuesQuery.data?.items ?? []}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.list}
-        ListHeaderComponent={
-          <Text style={styles.pinCount}>{pins.length} pin{pins.length === 1 ? "" : "s"}</Text>
-        }
-        renderItem={({ item }) => <VenueCardView venue={item} />}
-        ListEmptyComponent={
-          !venuesQuery.isLoading ? (
-            <Text style={styles.empty}>No venues in range. Seed local data, then retry.</Text>
-          ) : null
-        }
-      />
+      {auth.status === "authenticated" ? (
+        <FlatList
+          data={venuesQuery.data?.items ?? []}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.list}
+          ListHeaderComponent={
+            <Text style={styles.pinCount}>
+              {pins.length} pin{pins.length === 1 ? "" : "s"}
+            </Text>
+          }
+          renderItem={({ item }) => <VenueCardView venue={item} />}
+          ListEmptyComponent={
+            !venuesQuery.isLoading ? (
+              <Text style={styles.empty}>No venues in range. Seed local data, then retry.</Text>
+            ) : null
+          }
+        />
+      ) : null}
     </View>
   );
 }
@@ -108,5 +130,24 @@ const styles = StyleSheet.create({
   error: {
     color: "#f87171",
     marginBottom: 8,
+  },
+  signedOut: {
+    gap: 12,
+    marginTop: 12,
+  },
+  help: {
+    color: "#9aa6bf",
+  },
+  button: {
+    backgroundColor: "#3b82f6",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    alignItems: "center",
+    alignSelf: "flex-start",
+  },
+  buttonText: {
+    color: "#fff",
+    fontWeight: "600",
   },
 });

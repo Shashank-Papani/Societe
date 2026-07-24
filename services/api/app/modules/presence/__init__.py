@@ -1,1 +1,1 @@
-"""presence module placeholder (implemented in later phases)."""
+"""Presence, geofencing, and Valkey lease management (Phase 2)."""

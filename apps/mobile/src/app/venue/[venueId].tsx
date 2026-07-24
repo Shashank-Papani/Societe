@@ -2,22 +2,29 @@ import { useQuery } from "@tanstack/react-query";
 import { Stack, useLocalSearchParams } from "expo-router";
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
 
+import { useAuth } from "@/auth/AuthProvider";
 import { fetchVenueDetail } from "@/features/discover/api";
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 export default function VenueDetailScreen() {
+  const auth = useAuth();
   const { venueId } = useLocalSearchParams<{ venueId: string }>();
   const detailQuery = useQuery({
     queryKey: ["venue", venueId],
     queryFn: () => fetchVenueDetail(String(venueId)),
-    enabled: Boolean(venueId),
+    enabled: Boolean(venueId) && auth.status === "authenticated",
   });
 
   return (
     <View style={styles.container}>
       <Stack.Screen options={{ headerShown: true, title: "Venue", headerTintColor: "#f5f7fb" }} />
-      {detailQuery.isLoading ? <ActivityIndicator color="#9aa6bf" style={{ marginTop: 40 }} /> : null}
+      {auth.status === "initializing" || detailQuery.isLoading ? (
+        <ActivityIndicator color="#9aa6bf" style={{ marginTop: 40 }} />
+      ) : null}
+      {auth.status === "unauthenticated" ? (
+        <Text style={styles.error}>Sign in to view venue details.</Text>
+      ) : null}
       {detailQuery.error ? (
         <Text style={styles.error}>{(detailQuery.error as Error).message}</Text>
       ) : null}

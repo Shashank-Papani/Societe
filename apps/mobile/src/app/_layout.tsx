@@ -4,6 +4,8 @@ import * as SplashScreen from "expo-splash-screen";
 import { useState } from "react";
 import { StatusBar } from "expo-status-bar";
 
+import { AuthProvider } from "@/auth/AuthProvider";
+
 SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
 export default function RootLayout() {
@@ -11,14 +13,20 @@ export default function RootLayout() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <StatusBar style="light" />
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="(tabs)" />
-        <Stack.Screen
-          name="venue/[venueId]"
-          options={{ headerShown: true, title: "Venue", headerStyle: { backgroundColor: "#0b1220" } }}
-        />
-      </Stack>
+      <AuthProvider>
+        <StatusBar style="light" />
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="(tabs)" />
+          <Stack.Screen
+            name="venue/[venueId]"
+            options={{
+              headerShown: true,
+              title: "Venue",
+              headerStyle: { backgroundColor: "#0b1220" },
+            }}
+          />
+        </Stack>
+      </AuthProvider>
     </QueryClientProvider>
   );
 }

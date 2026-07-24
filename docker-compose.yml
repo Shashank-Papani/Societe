@@ -104,6 +104,33 @@ services:
       retries: 20
       start_period: 20s
 
+  location-aggregator:
+    build:
+      context: .
+      dockerfile: infra/docker/api.Dockerfile
+      args:
+        PYTHON_IMAGE: ${API_PYTHON_IMAGE:-python:3.12.13-slim-bookworm}
+    container_name: societe-location-aggregator
+    env_file:
+      - .env
+    environment:
+      APP_ENV: development
+      AUTH_PROVIDER: local
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-societe}:${POSTGRES_PASSWORD:-societe}@postgres:5432/${POSTGRES_DB:-societe}
+      VALKEY_URL: redis://valkey:6379/0
+      PYTHONPATH: /app/services/workers
+    entrypoint: ["python", "-m", "location_aggregator"]
+    volumes:
+      - ./services/api/app:/app/services/api/app
+      - ./services/workers:/app/services/workers
+    depends_on:
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+
 volumes:
   societe_postgres_data:
   societe_minio_data:

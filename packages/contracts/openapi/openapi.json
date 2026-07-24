@@ -60,6 +60,126 @@
         "title": "DeviceCreate",
         "type": "object"
       },
+      "EvidenceLocation": {
+        "additionalProperties": false,
+        "properties": {
+          "altitude_m": {
+            "anyOf": [
+              {
+                "maximum": 12000.0,
+                "minimum": -500.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Altitude M"
+          },
+          "horizontal_accuracy_m": {
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "title": "Horizontal Accuracy M",
+            "type": "number"
+          },
+          "latitude": {
+            "maximum": 90.0,
+            "minimum": -90.0,
+            "title": "Latitude",
+            "type": "number"
+          },
+          "longitude": {
+            "maximum": 180.0,
+            "minimum": -180.0,
+            "title": "Longitude",
+            "type": "number"
+          },
+          "provider": {
+            "enum": [
+              "fused",
+              "gps",
+              "network",
+              "simulated"
+            ],
+            "title": "Provider",
+            "type": "string"
+          },
+          "speed_mps": {
+            "anyOf": [
+              {
+                "maximum": 350.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speed Mps"
+          }
+        },
+        "required": [
+          "latitude",
+          "longitude",
+          "horizontal_accuracy_m",
+          "provider"
+        ],
+        "title": "EvidenceLocation",
+        "type": "object"
+      },
+      "EvidenceRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "candidate_venue_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidate Venue Id"
+          },
+          "client_sequence": {
+            "minimum": 0.0,
+            "title": "Client Sequence",
+            "type": "integer"
+          },
+          "device_id": {
+            "format": "uuid",
+            "title": "Device Id",
+            "type": "string"
+          },
+          "evidence_id": {
+            "format": "uuid",
+            "title": "Evidence Id",
+            "type": "string"
+          },
+          "location": {
+            "$ref": "#/components/schemas/EvidenceLocation"
+          },
+          "observed_at": {
+            "format": "date-time",
+            "title": "Observed At",
+            "type": "string"
+          },
+          "platform_signals": {
+            "$ref": "#/components/schemas/PlatformSignals"
+          }
+        },
+        "required": [
+          "evidence_id",
+          "observed_at",
+          "location",
+          "platform_signals",
+          "client_sequence",
+          "device_id"
+        ],
+        "title": "EvidenceRequest",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -71,6 +191,25 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "LeaveRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "confirmation": {
+            "anyOf": [
+              {
+                "const": "LEAVE",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirmation"
+          }
+        },
+        "title": "LeaveRequest",
         "type": "object"
       },
       "LocalDevTokenRequest": {
@@ -88,6 +227,34 @@
           }
         },
         "title": "LocalDevTokenRequest",
+        "type": "object"
+      },
+      "PlatformSignals": {
+        "additionalProperties": false,
+        "properties": {
+          "app_state": {
+            "enum": [
+              "foreground",
+              "background"
+            ],
+            "title": "App State",
+            "type": "string"
+          },
+          "is_mock": {
+            "title": "Is Mock",
+            "type": "boolean"
+          },
+          "is_simulated": {
+            "title": "Is Simulated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "is_mock",
+          "is_simulated",
+          "app_state"
+        ],
+        "title": "PlatformSignals",
         "type": "object"
       },
       "PrivacyPatch": {
@@ -211,6 +378,98 @@
           }
         },
         "title": "ProfilePatch",
+        "type": "object"
+      },
+      "SimulatorRequest": {
+        "additionalProperties": false,
+        "description": "Development-only spatial input; replayed through the production engine.",
+        "properties": {
+          "altitude_m": {
+            "anyOf": [
+              {
+                "maximum": 12000.0,
+                "minimum": -500.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Altitude M"
+          },
+          "candidate_venue_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidate Venue Id"
+          },
+          "client_sequence": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Client Sequence",
+            "type": "integer"
+          },
+          "device_id": {
+            "format": "uuid",
+            "title": "Device Id",
+            "type": "string"
+          },
+          "horizontal_accuracy_m": {
+            "default": 8.0,
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "title": "Horizontal Accuracy M",
+            "type": "number"
+          },
+          "latitude": {
+            "maximum": 90.0,
+            "minimum": -90.0,
+            "title": "Latitude",
+            "type": "number"
+          },
+          "longitude": {
+            "maximum": 180.0,
+            "minimum": -180.0,
+            "title": "Longitude",
+            "type": "number"
+          },
+          "provider": {
+            "default": "simulated",
+            "enum": [
+              "fused",
+              "gps",
+              "network",
+              "simulated"
+            ],
+            "title": "Provider",
+            "type": "string"
+          },
+          "speed_mps": {
+            "anyOf": [
+              {
+                "maximum": 350.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speed Mps"
+          }
+        },
+        "required": [
+          "latitude",
+          "longitude",
+          "device_id"
+        ],
+        "title": "SimulatorRequest",
         "type": "object"
       },
       "ValidationError": {
@@ -362,6 +621,55 @@
         "summary": "Issue Local Dev Token",
         "tags": [
           "identity"
+        ]
+      }
+    },
+    "/v1/dev/location/simulate": {
+      "post": {
+        "description": "Development-only. Runs the production engine with is_simulated=true.",
+        "operationId": "simulate_location_v1_dev_location_simulate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SimulatorRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Simulate Location V1 Dev Location Simulate Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Simulate Location",
+        "tags": [
+          "presence"
         ]
       }
     },
@@ -957,6 +1265,173 @@
         "summary": "Patch Privacy",
         "tags": [
           "identity"
+        ]
+      }
+    },
+    "/v1/presence/evidence": {
+      "post": {
+        "operationId": "submit_evidence_v1_presence_evidence_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EvidenceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Submit Evidence V1 Presence Evidence Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Submit Evidence",
+        "tags": [
+          "presence"
+        ]
+      }
+    },
+    "/v1/presence/leave": {
+      "post": {
+        "operationId": "leave_presence_v1_presence_leave_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/LeaveRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Leave Presence V1 Presence Leave Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Leave Presence",
+        "tags": [
+          "presence"
+        ]
+      }
+    },
+    "/v1/presence/me": {
+      "get": {
+        "operationId": "get_presence_me_v1_presence_me_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Presence Me V1 Presence Me Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Presence Me",
+        "tags": [
+          "presence"
         ]
       }
     },

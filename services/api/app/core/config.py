@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 from typing import Literal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -41,6 +42,20 @@ class Settings(BaseSettings):
     venue_static_cache_ttl_seconds: int = 600
     idempotency_ttl_seconds: int = 86_400
 
+    # Presence — server clock is authoritative. observed_at only gates freshness.
+    max_evidence_age_seconds: int = 15
+    max_observed_future_skew_seconds: int = 5
+    presence_candidate_radius_m: int = 150
+    verified_lease_seconds: int = 120
+    degraded_grace_seconds: int = 300
+    evidence_idempotency_ttl_seconds: int = 900
+    location_rate_limit_per_user_per_minute: int = 20
+    location_rate_limit_per_device_per_minute: int = 20
+    presence_sample_buffer_max: int = 12
+    presence_sample_buffer_ttl_seconds: int = 120
+    evidence_absolute_max_retention_hours: int = 36
+    default_purge_timezone: str = "America/Los_Angeles"
+
     database_url: str = "postgresql+asyncpg://societe:societe@localhost:5432/societe"
     valkey_url: str = "redis://localhost:6379/0"
 
@@ -61,6 +76,46 @@ class Settings(BaseSettings):
     ff_media_posting: bool = False
     ff_automated_moderation: bool = False
     ff_ghost_mode: bool = True
+    ff_location_simulator: bool = False
+
+    @model_validator(mode="after")
+    def reject_location_simulator_outside_development(self) -> Settings:
+        if self.ff_location_simulator and self.app_env in {"staging", "production"}:
+            msg = (
+                "FF_LOCATION_SIMULATOR=true is forbidden when APP_ENV is "
+                f"{self.app_env!r}. The simulator bypasses mock-location rejection."
+            )
+            raise ValueError(msg)
+        if self.ff_location_simulator and self.app_env not in {"development", "test"}:
+            msg = "FF_LOCATION_SIMULATOR=true requires APP_ENV development or test."
+            raise ValueError(msg)
+        return self
+
+    @model_validator(mode="after")
+    def validate_presence_settings(self) -> Settings:
+        try:
+            ZoneInfo(self.default_purge_timezone)
+        except ZoneInfoNotFoundError as exc:
+            msg = (
+                f"DEFAULT_PURGE_TIMEZONE {self.default_purge_timezone!r} is not a valid IANA zone."
+            )
+            raise ValueError(msg) from exc
+        if self.degraded_grace_seconds < self.verified_lease_seconds:
+            msg = "DEGRADED_GRACE_SECONDS must be >= VERIFIED_LEASE_SECONDS."
+            raise ValueError(msg)
+        for name, value in (
+            ("MAX_EVIDENCE_AGE_SECONDS", self.max_evidence_age_seconds),
+            ("MAX_OBSERVED_FUTURE_SKEW_SECONDS", self.max_observed_future_skew_seconds),
+            ("PRESENCE_CANDIDATE_RADIUS_M", self.presence_candidate_radius_m),
+            ("VERIFIED_LEASE_SECONDS", self.verified_lease_seconds),
+            ("PRESENCE_SAMPLE_BUFFER_MAX", self.presence_sample_buffer_max),
+            ("PRESENCE_SAMPLE_BUFFER_TTL_SECONDS", self.presence_sample_buffer_ttl_seconds),
+            ("EVIDENCE_ABSOLUTE_MAX_RETENTION_HOURS", self.evidence_absolute_max_retention_hours),
+        ):
+            if value <= 0:
+                msg = f"{name} must be greater than zero."
+                raise ValueError(msg)
+        return self
 
     @model_validator(mode="after")
     def reject_local_auth_outside_development(self) -> Settings:

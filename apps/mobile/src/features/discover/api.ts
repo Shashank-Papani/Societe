@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import { apiFetch } from "@/api/client";
-import { getAccessToken } from "@/auth/tokenStore";
+import { getLiveAccessToken } from "@/auth/AuthProvider";
 
 const venueCardSchema = z.object({
   id: z.string(),
@@ -60,7 +60,7 @@ export type VenueCard = z.infer<typeof venueCardSchema>;
 export type VenueDetail = z.infer<typeof venueDetailSchema>;
 
 async function authHeaders(): Promise<HeadersInit> {
-  const token = await getAccessToken();
+  const token = getLiveAccessToken();
   if (!token) {
     throw new Error("Not signed in");
   }

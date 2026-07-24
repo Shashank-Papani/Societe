@@ -40,7 +40,9 @@ class IdempotencyService:
             }
         )
 
-    def _base_record(self, ctx: IdempotencyContext, fingerprint: str, state: str) -> dict[str, Any]:
+    def _base_record(
+        self, ctx: IdempotencyContext, fingerprint: str, state: str, *, ttl: int
+    ) -> dict[str, Any]:
         now = int(time.time())
         return {
             "state": state,
@@ -49,26 +51,27 @@ class IdempotencyService:
             "route": ctx.route,
             "body_fingerprint": fingerprint,
             "created_at": now,
-            "expires_at": now + self._ttl,
+            "expires_at": now + ttl,
         }
 
     async def run(
         self,
         ctx: IdempotencyContext,
         handler: IdempotencyHandler,
+        *,
+        ttl_seconds: int | None = None,
     ) -> tuple[int, dict[str, Any]]:
+        ttl = ttl_seconds if ttl_seconds is not None else self._ttl
         storage_key = self._storage_key(ctx)
         fingerprint = self._fingerprint(ctx)
-        processing_payload = json.dumps(self._base_record(ctx, fingerprint, "processing"))
-        acquired = await self._redis.set(storage_key, processing_payload, nx=True, ex=self._ttl)
+        processing_payload = json.dumps(self._base_record(ctx, fingerprint, "processing", ttl=ttl))
+        acquired = await self._redis.set(storage_key, processing_payload, nx=True, ex=ttl)
         if not acquired:
             existing_raw = await self._redis.get(storage_key)
             if existing_raw is None:
-                acquired = await self._redis.set(
-                    storage_key, processing_payload, nx=True, ex=self._ttl
-                )
+                acquired = await self._redis.set(storage_key, processing_payload, nx=True, ex=ttl)
                 if acquired:
-                    return await self._execute(ctx, handler, storage_key, fingerprint)
+                    return await self._execute(ctx, handler, storage_key, fingerprint, ttl)
                 existing_raw = await self._redis.get(storage_key)
             if existing_raw is None:
                 raise AppError(
@@ -102,7 +105,7 @@ class IdempotencyService:
                 status_code=409,
             )
 
-        return await self._execute(ctx, handler, storage_key, fingerprint)
+        return await self._execute(ctx, handler, storage_key, fingerprint, ttl)
 
     async def _execute(
         self,
@@ -110,20 +113,21 @@ class IdempotencyService:
         handler: IdempotencyHandler,
         storage_key: str,
         fingerprint: str,
+        ttl: int,
     ) -> tuple[int, dict[str, Any]]:
         try:
             status_code, body = await handler()
         except Exception:
-            failed = self._base_record(ctx, fingerprint, "failed")
+            failed = self._base_record(ctx, fingerprint, "failed", ttl=ttl)
             existing_raw = await self._redis.get(storage_key)
             if existing_raw:
                 existing = json.loads(existing_raw)
                 if "created_at" in existing:
                     failed["created_at"] = existing["created_at"]
-            await self._redis.set(storage_key, json.dumps(failed), ex=self._ttl)
+            await self._redis.set(storage_key, json.dumps(failed), ex=ttl)
             raise
 
-        completed = self._base_record(ctx, fingerprint, "completed")
+        completed = self._base_record(ctx, fingerprint, "completed", ttl=ttl)
         existing_raw = await self._redis.get(storage_key)
         if existing_raw:
             existing = json.loads(existing_raw)
@@ -131,5 +135,5 @@ class IdempotencyService:
                 completed["created_at"] = existing["created_at"]
         completed["status_code"] = status_code
         completed["body"] = body
-        await self._redis.set(storage_key, json.dumps(completed), ex=self._ttl)
+        await self._redis.set(storage_key, json.dumps(completed), ex=ttl)
         return status_code, body

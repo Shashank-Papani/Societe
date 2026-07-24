@@ -1,7 +1,9 @@
 import { z } from "zod";
+import { Platform } from "react-native";
 
 import { apiFetch } from "@/api/client";
-import { clearAccessToken, getAccessToken, saveAccessToken } from "@/auth/tokenStore";
+import { useAuth } from "@/auth/AuthProvider";
+import { getOrCreateInstallationId, saveDeviceId } from "@/auth/deviceStore";
 
 const tokenSchema = z.object({
   access_token: z.string(),
@@ -35,29 +37,60 @@ const meSchema = z.object({
   updated_at: z.string(),
 });
 
+const deviceSchema = z.object({
+  id: z.string(),
+  platform: z.string(),
+  installation_id: z.string(),
+});
+
 export type MeUser = z.infer<typeof meSchema>;
 
-export async function loginWithLocalDevToken(): Promise<MeUser> {
-  const envelope = await apiFetch<z.infer<typeof tokenSchema>>("/v1/auth/local/token", {
-    method: "POST",
-    body: JSON.stringify({}),
-  });
-  const token = tokenSchema.parse(envelope.data);
-  await saveAccessToken(token.access_token);
-  return fetchMe();
-}
-
 export async function fetchMe(): Promise<MeUser> {
-  const accessToken = await getAccessToken();
-  if (!accessToken) {
-    throw new Error("Not signed in");
-  }
-  const envelope = await apiFetch<MeUser>("/v1/me", {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
+  const envelope = await apiFetch<MeUser>("/v1/me");
   return meSchema.parse(envelope.data);
 }
 
-export async function logout(): Promise<void> {
-  await clearAccessToken();
+export async function issueLocalDevToken(): Promise<string> {
+  const envelope = await apiFetch<z.infer<typeof tokenSchema>>(
+    "/v1/auth/local/token",
+    {
+      method: "POST",
+      body: JSON.stringify({}),
+    },
+    { auth: false },
+  );
+  const token = tokenSchema.parse(envelope.data);
+  return token.access_token;
+}
+
+async function registerCurrentDevice(): Promise<void> {
+  const installationId = await getOrCreateInstallationId();
+  const platform = Platform.OS === "ios" ? "ios" : "android";
+  const envelope = await apiFetch<z.infer<typeof deviceSchema>>("/v1/me/devices", {
+    method: "POST",
+    headers: { "Idempotency-Key": `device-${installationId}` },
+    body: JSON.stringify({
+      platform,
+      installation_id: installationId,
+      app_version: "0.1.0",
+      os_version: "dev",
+    }),
+  });
+  const device = deviceSchema.parse(envelope.data);
+  await saveDeviceId(device.id);
+}
+
+/** Hook-friendly login used by Profile — updates AuthProvider immediately. */
+export function useLocalLogin() {
+  const auth = useAuth();
+  return async () => {
+    const token = await issueLocalDevToken();
+    await auth.setSession(token);
+    try {
+      await registerCurrentDevice();
+    } catch {
+      // Best-effort; Presence will surface a clear error if missing.
+    }
+    return fetchMe();
+  };
 }

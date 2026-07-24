@@ -20,6 +20,8 @@ COPY --from=ghcr.io/astral-sh/uv:0.11.32 /uv /usr/local/bin/uv
 COPY pyproject.toml uv.lock ./
 COPY services/api/pyproject.toml services/api/pyproject.toml
 COPY services/api/app services/api/app
+# Workers share the API codepath; they are plain packages on PYTHONPATH.
+COPY services/workers services/workers
 
 RUN uv sync --frozen --package societe-api --no-dev
 

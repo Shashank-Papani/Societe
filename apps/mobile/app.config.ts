@@ -33,6 +33,13 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     "expo-sqlite",
     "expo-dev-client",
     [
+      "expo-location",
+      {
+        locationWhenInUsePermission:
+          "Société uses your location to verify you are at a venue.",
+      },
+    ],
+    [
       "expo-splash-screen",
       {
         backgroundColor: "#208AEF",

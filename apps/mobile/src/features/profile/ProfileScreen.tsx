@@ -2,27 +2,30 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { API_BASE_URL } from "@/api/client";
-import { fetchMe, loginWithLocalDevToken, logout, type MeUser } from "@/auth/localAuth";
+import { useAuth } from "@/auth/AuthProvider";
+import { fetchMe, useLocalLogin, type MeUser } from "@/auth/localAuth";
 
 export function ProfileScreen() {
+  const auth = useAuth();
   const queryClient = useQueryClient();
+  const login = useLocalLogin();
+
   const meQuery = useQuery({
     queryKey: ["me"],
     queryFn: fetchMe,
+    enabled: auth.status === "authenticated",
     retry: false,
   });
 
   const loginMutation = useMutation({
-    mutationFn: loginWithLocalDevToken,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["me"] }),
+    mutationFn: login,
+    onSuccess: (user) => {
+      queryClient.setQueryData(["me"], user);
+    },
   });
 
   const logoutMutation = useMutation({
-    mutationFn: logout,
-    onSuccess: () => {
-      queryClient.setQueryData(["me"], null);
-      queryClient.removeQueries({ queryKey: ["map-venues"] });
-    },
+    mutationFn: () => auth.clearSession(),
   });
 
   const privacyHint = privacySummary(meQuery.data);
@@ -33,9 +36,11 @@ export function ProfileScreen() {
       <Text style={styles.title}>Profile</Text>
       <Text style={styles.meta}>API: {API_BASE_URL}</Text>
 
-      {meQuery.isLoading ? <ActivityIndicator color="#9aa6bf" /> : null}
+      {auth.status === "initializing" || meQuery.isLoading ? (
+        <ActivityIndicator color="#9aa6bf" />
+      ) : null}
 
-      {meQuery.data ? (
+      {auth.status === "authenticated" && meQuery.data ? (
         <View style={styles.block}>
           <Text style={styles.handle}>@{meQuery.data.handle}</Text>
           <Text style={styles.display}>{meQuery.data.display_name}</Text>
@@ -46,7 +51,7 @@ export function ProfileScreen() {
             <Text style={styles.buttonText}>Sign out</Text>
           </Pressable>
         </View>
-      ) : (
+      ) : auth.status !== "initializing" ? (
         <View style={styles.block}>
           <Text style={styles.label}>Local development auth</Text>
           <Text style={styles.help}>
@@ -65,7 +70,7 @@ export function ProfileScreen() {
             <Text style={styles.error}>{(loginMutation.error as Error).message}</Text>
           ) : null}
         </View>
-      )}
+      ) : null}
     </View>
   );
 }
