@@ -12,6 +12,7 @@ def test_local_token_and_me(client: TestClient) -> None:
     assert token_body["error"] is None
     access_token = token_body["data"]["access_token"]
     assert token_body["data"]["subject"] == "local-dev-user"
+    assert token_body["data"]["handle"] == "localdev"
 
     me_response = client.get(
         "/v1/me",
@@ -19,9 +20,11 @@ def test_local_token_and_me(client: TestClient) -> None:
     )
     assert me_response.status_code == 200
     me_body = me_response.json()
-    assert me_body["data"]["subject"] == "local-dev-user"
     assert me_body["data"]["handle"] == "localdev"
-    assert me_body["data"]["auth_provider"] == "local"
+    assert "auth_subject" not in me_body["data"]
+    assert "subject" not in me_body["data"]
+    assert "privacy" in me_body["data"]
+    assert "effective" in me_body["data"]["privacy"]
 
 
 def test_me_requires_bearer(client: TestClient) -> None:
@@ -36,6 +39,7 @@ def test_local_auth_rejected_in_production(monkeypatch: pytest.MonkeyPatch) -> N
     monkeypatch.setenv("APP_ENV", "production")
     monkeypatch.setenv("AUTH_PROVIDER", "local")
     monkeypatch.setenv("JWT_SECRET", "test-secret-not-for-production-0123456789abcdef")
+    monkeypatch.setenv("CURSOR_HMAC_SECRET", "test-cursor-hmac-secret-0123456789abcdef01234567")
     from app.core.config import Settings, get_settings
 
     get_settings.cache_clear()

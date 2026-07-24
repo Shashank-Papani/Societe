@@ -12,18 +12,20 @@ def _test_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     monkeypatch.setenv("APP_ENV", "test")
     monkeypatch.setenv("AUTH_PROVIDER", "local")
     monkeypatch.setenv("JWT_SECRET", "test-secret-not-for-production-0123456789abcdef")
+    monkeypatch.setenv("CURSOR_HMAC_SECRET", "test-cursor-hmac-secret-0123456789abcdef01234567")
     monkeypatch.setenv("OTEL_ENABLED", "false")
-    # Clear settings cache between tests.
     from app.core.config import get_settings
+    from app.db.session import reset_resource_globals
 
     get_settings.cache_clear()
+    reset_resource_globals()
     yield
     get_settings.cache_clear()
+    reset_resource_globals()
 
 
 @pytest.fixture
 def client(_test_env: None) -> Iterator[TestClient]:
-    # Import after env is set so Settings() validates correctly.
     from app.main import create_app
 
     app = create_app()

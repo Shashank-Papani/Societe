@@ -2,9 +2,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { API_BASE_URL } from "@/api/client";
-import { fetchMe, loginWithLocalDevToken, logout } from "@/auth/localAuth";
+import { fetchMe, loginWithLocalDevToken, logout, type MeUser } from "@/auth/localAuth";
 
-export default function HomeScreen() {
+export function ProfileScreen() {
   const queryClient = useQueryClient();
   const meQuery = useQuery({
     queryKey: ["me"],
@@ -19,33 +19,38 @@ export default function HomeScreen() {
 
   const logoutMutation = useMutation({
     mutationFn: logout,
-    onSuccess: () => queryClient.setQueryData(["me"], null),
+    onSuccess: () => {
+      queryClient.setQueryData(["me"], null);
+      queryClient.removeQueries({ queryKey: ["map-venues"] });
+    },
   });
+
+  const privacyHint = privacySummary(meQuery.data);
 
   return (
     <View style={styles.container}>
       <Text style={styles.brand}>Société</Text>
-      <Text style={styles.subtitle}>Phase 0 foundation</Text>
+      <Text style={styles.title}>Profile</Text>
       <Text style={styles.meta}>API: {API_BASE_URL}</Text>
 
-      {meQuery.isLoading ? <ActivityIndicator /> : null}
+      {meQuery.isLoading ? <ActivityIndicator color="#9aa6bf" /> : null}
 
       {meQuery.data ? (
-        <View style={styles.card}>
-          <Text style={styles.label}>Signed in</Text>
-          <Text>subject: {meQuery.data.subject}</Text>
-          <Text>handle: {meQuery.data.handle}</Text>
-          <Text>provider: {meQuery.data.auth_provider}</Text>
+        <View style={styles.block}>
+          <Text style={styles.handle}>@{meQuery.data.handle}</Text>
+          <Text style={styles.display}>{meQuery.data.display_name}</Text>
+          <Text style={styles.row}>Status: {meQuery.data.account_status}</Text>
+          <Text style={styles.row}>{privacyHint}</Text>
+          {meQuery.data.bio ? <Text style={styles.bio}>{meQuery.data.bio}</Text> : null}
           <Pressable style={styles.buttonSecondary} onPress={() => logoutMutation.mutate()}>
             <Text style={styles.buttonText}>Sign out</Text>
           </Pressable>
         </View>
       ) : (
-        <View style={styles.card}>
+        <View style={styles.block}>
           <Text style={styles.label}>Local development auth</Text>
           <Text style={styles.help}>
-            Uses POST /v1/auth/local/token. Available only when the API runs with
-            APP_ENV=development|test and AUTH_PROVIDER=local.
+            Signs in via POST /v1/auth/local/token when AUTH_PROVIDER=local.
           </Text>
           <Pressable
             style={styles.button}
@@ -59,42 +64,67 @@ export default function HomeScreen() {
           {loginMutation.error ? (
             <Text style={styles.error}>{(loginMutation.error as Error).message}</Text>
           ) : null}
-          {meQuery.error ? (
-            <Text style={styles.help}>Not signed in yet.</Text>
-          ) : null}
         </View>
       )}
     </View>
   );
 }
 
+function privacySummary(user: MeUser | null | undefined): string {
+  if (!user) {
+    return "";
+  }
+  const ghost = user.privacy.effective.ghost_mode_overrides;
+  if (ghost) {
+    return "Ghost Mode on · social discovery suppressed (client hint)";
+  }
+  return user.privacy.discoverable_in_venue
+    ? "Discoverable in venue (enforcement in later phases)"
+    : "Not discoverable in venue";
+}
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: "center",
-    padding: 24,
-    gap: 12,
     backgroundColor: "#0b1220",
+    paddingTop: 56,
+    paddingHorizontal: 20,
+    gap: 10,
   },
   brand: {
-    fontSize: 40,
+    fontSize: 28,
     fontWeight: "700",
     color: "#f5f7fb",
   },
-  subtitle: {
-    fontSize: 16,
-    color: "#9aa6bf",
+  title: {
+    fontSize: 22,
+    fontWeight: "600",
+    color: "#f5f7fb",
   },
   meta: {
     fontSize: 12,
     color: "#6f7c99",
     marginBottom: 8,
   },
-  card: {
+  block: {
     gap: 10,
-    padding: 16,
-    borderRadius: 12,
-    backgroundColor: "#151d2e",
+  },
+  handle: {
+    color: "#f5f7fb",
+    fontSize: 20,
+    fontWeight: "600",
+  },
+  display: {
+    color: "#9aa6bf",
+    fontSize: 16,
+  },
+  row: {
+    color: "#9aa6bf",
+    fontSize: 14,
+  },
+  bio: {
+    color: "#c8d0e0",
+    lineHeight: 20,
   },
   label: {
     fontSize: 18,

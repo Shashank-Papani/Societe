@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -17,6 +18,16 @@ from app.core.config import Settings, get_settings
 _engine: AsyncEngine | None = None
 _session_factory: async_sessionmaker[AsyncSession] | None = None
 _redis: Redis[str] | None = None
+_redis_loop: asyncio.AbstractEventLoop | None = None
+
+
+def reset_resource_globals() -> None:
+    """Clear cached engine/redis (tests that open/close event loops)."""
+    global _engine, _session_factory, _redis, _redis_loop
+    _engine = None
+    _session_factory = None
+    _redis = None
+    _redis_loop = None
 
 
 def get_engine(settings: Settings | None = None) -> AsyncEngine:
@@ -46,10 +57,25 @@ async def get_db_session() -> AsyncIterator[AsyncSession]:
 
 
 def get_redis(settings: Settings | None = None) -> Redis[str]:
-    global _redis
+    global _redis, _redis_loop
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    if (
+        _redis is not None
+        and _redis_loop is not None
+        and loop is not None
+        and _redis_loop is not loop
+    ):
+        _redis = None
+        _redis_loop = None
+
     if _redis is None:
         cfg = settings or get_settings()
         _redis = Redis.from_url(cfg.valkey_url, decode_responses=True)
+        _redis_loop = loop
     return _redis
 
 
@@ -66,13 +92,14 @@ async def check_valkey(settings: Settings | None = None) -> None:
 
 
 async def dispose_resources() -> None:
-    global _engine, _session_factory, _redis
+    global _engine, _session_factory, _redis, _redis_loop
     if _redis is not None:
         close = getattr(_redis, "aclose", None) or _redis.close
         result: Any = close()
         if hasattr(result, "__await__"):
             await result
         _redis = None
+        _redis_loop = None
     if _engine is not None:
         await _engine.dispose()
         _engine = None

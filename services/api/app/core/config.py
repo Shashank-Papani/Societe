@@ -28,6 +28,19 @@ class Settings(BaseSettings):
     local_dev_subject: str = "local-dev-user"
     local_dev_handle: str = "localdev"
 
+    cognito_region: str = "us-west-2"
+    cognito_user_pool_id: str = ""
+    cognito_app_client_id: str = ""
+    cognito_accept_id_tokens: bool = False
+    cognito_allowed_algorithms: list[str] = Field(default_factory=lambda: ["RS256"])
+
+    cursor_hmac_secret: SecretStr = Field(
+        default=SecretStr("dev-only-cursor-hmac-change-me-0123456789abcdef")
+    )
+    cursor_ttl_seconds: int = 1800
+    venue_static_cache_ttl_seconds: int = 600
+    idempotency_ttl_seconds: int = 86_400
+
     database_url: str = "postgresql+asyncpg://societe:societe@localhost:5432/societe"
     valkey_url: str = "redis://localhost:6379/0"
 
@@ -62,6 +75,12 @@ class Settings(BaseSettings):
             "replace-me-with-openssl-rand-hex-32",
         }:
             msg = "JWT_SECRET must be set to a strong value for local auth."
+            raise ValueError(msg)
+        if self.cursor_hmac_secret.get_secret_value() in {
+            "",
+            "replace-me-cursor-hmac",
+        }:
+            msg = "CURSOR_HMAC_SECRET must be set."
             raise ValueError(msg)
         return self
 

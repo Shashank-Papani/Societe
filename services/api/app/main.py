@@ -22,6 +22,7 @@ from app.core.middleware import RequestContextMiddleware
 from app.core.telemetry import setup_telemetry
 from app.db.session import dispose_resources
 from app.modules.identity.router import router as identity_router
+from app.modules.venues.router import router as venues_router
 
 logger = get_logger(__name__)
 
@@ -41,7 +42,6 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
 
 def create_app() -> FastAPI:
-    # Validate settings (including local-auth guard) at import/startup.
     settings = get_settings()
 
     application = FastAPI(
@@ -67,6 +67,7 @@ def create_app() -> FastAPI:
 
     application.include_router(health_router)
     application.include_router(identity_router)
+    application.include_router(venues_router)
 
     setup_telemetry(application, settings)
     return application

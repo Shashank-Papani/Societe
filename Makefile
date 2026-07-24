@@ -1,4 +1,4 @@
-.PHONY: bootstrap dev-up dev-down dev-logs migrate test lint typecheck clean reset-local-data \
+.PHONY: bootstrap dev-up dev-down dev-logs migrate seed test lint typecheck clean reset-local-data \
 	openapi openapi-check terraform-validate help
 
 ROOT_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
@@ -14,6 +14,7 @@ help:
 	@echo "  dev-down          Stop containers (keeps volumes)"
 	@echo "  dev-logs          Tail API logs"
 	@echo "  migrate           Run Alembic migrations"
+	@echo "  seed              Seed synthetic LA venues and users"
 	@echo "  test              Run Python tests"
 	@echo "  lint              Run Ruff + mobile lint"
 	@echo "  typecheck         Run mypy + mobile tsc"
@@ -29,9 +30,11 @@ bootstrap:
 	@if [ ! -f "$(ROOT_DIR)/.env" ]; then \
 		cp "$(ROOT_DIR)/.env.example" "$(ROOT_DIR)/.env"; \
 		SECRET=$$(openssl rand -hex 32); \
+		CURSOR=$$(openssl rand -hex 32); \
 		sed -i.bak "s/replace-me-with-openssl-rand-hex-32/$$SECRET/" "$(ROOT_DIR)/.env"; \
+		sed -i.bak "s/replace-me-cursor-hmac/$$CURSOR/" "$(ROOT_DIR)/.env"; \
 		rm -f "$(ROOT_DIR)/.env.bak"; \
-		echo "Created .env with generated JWT_SECRET"; \
+		echo "Created .env with generated JWT_SECRET and CURSOR_HMAC_SECRET"; \
 	fi
 	cd "$(ROOT_DIR)" && $(UV) sync --all-packages
 	cd "$(ROOT_DIR)" && $(PNPM) install
@@ -50,6 +53,9 @@ dev-logs:
 
 migrate:
 	cd "$(ROOT_DIR)/services/api" && $(UV) run --project "$(ROOT_DIR)" alembic upgrade head
+
+seed:
+	cd "$(ROOT_DIR)" && set -a && . ./.env && set +a && $(UV) run python scripts/seed_local.py
 
 test:
 	cd "$(ROOT_DIR)" && $(UV) run pytest

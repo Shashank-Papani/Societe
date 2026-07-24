@@ -10,3 +10,4 @@ ADRs document durable technical decisions for Société.
 | 0004 | AppSync Events for realtime; REST for commands |
 | 0005 | Server-authoritative presence and privacy |
 | 0006 | Monorepo tooling (pnpm + uv) |
+| 0007 | Phase 1 map cache and identity boundaries |

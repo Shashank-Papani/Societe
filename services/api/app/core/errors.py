@@ -26,11 +26,17 @@ class AppError(Exception):
 
 
 async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
+    from app.shared.logging_redaction import redact_mapping
+
     meta = ApiMeta(
         request_id=getattr(request.state, "request_id", "unknown"),
     )
     body = error_response(
-        ApiError(code=exc.code, message=exc.message, details=exc.details),
+        ApiError(
+            code=exc.code,
+            message=exc.message,
+            details=redact_mapping(exc.details),
+        ),
         meta=meta,
     )
     return JSONResponse(status_code=exc.status_code, content=body.model_dump(mode="json"))

@@ -12,14 +12,32 @@ const tokenSchema = z.object({
 });
 
 const meSchema = z.object({
-  subject: z.string(),
+  id: z.string(),
   handle: z.string(),
-  auth_provider: z.string(),
+  display_name: z.string(),
+  bio: z.string().nullable().optional(),
+  age_verified: z.boolean(),
+  age_band: z.string().nullable().optional(),
+  account_status: z.string(),
+  privacy: z.object({
+    ghost_mode: z.boolean(),
+    discoverable_in_venue: z.boolean(),
+    allow_calling_cards: z.boolean(),
+    show_social_links_after_accept: z.boolean(),
+    analytics_opt_out: z.boolean(),
+    effective: z.object({
+      discoverable_in_venue: z.boolean(),
+      allow_calling_cards: z.boolean(),
+      ghost_mode_overrides: z.boolean(),
+    }),
+  }),
+  created_at: z.string(),
+  updated_at: z.string(),
 });
 
-export type LocalUser = z.infer<typeof meSchema>;
+export type MeUser = z.infer<typeof meSchema>;
 
-export async function loginWithLocalDevToken(): Promise<LocalUser> {
+export async function loginWithLocalDevToken(): Promise<MeUser> {
   const envelope = await apiFetch<z.infer<typeof tokenSchema>>("/v1/auth/local/token", {
     method: "POST",
     body: JSON.stringify({}),
@@ -29,12 +47,12 @@ export async function loginWithLocalDevToken(): Promise<LocalUser> {
   return fetchMe();
 }
 
-export async function fetchMe(): Promise<LocalUser> {
+export async function fetchMe(): Promise<MeUser> {
   const accessToken = await getAccessToken();
   if (!accessToken) {
     throw new Error("Not signed in");
   }
-  const envelope = await apiFetch<z.infer<typeof meSchema>>("/v1/me", {
+  const envelope = await apiFetch<MeUser>("/v1/me", {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   return meSchema.parse(envelope.data);

@@ -65,6 +65,7 @@ async def get_current_principal(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     settings: Settings = Depends(get_settings),
 ) -> dict[str, Any]:
+    """Legacy helper retained for Phase 0 tests; prefer auth.deps.get_current_user."""
     if credentials is None or credentials.scheme.lower() != "bearer":
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
