@@ -1,0 +1,9 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+allowBuilds:
+  unrs-resolver: true
+minimumReleaseAgeExclude:
+  - expo-dev-client@57.0.9
+  - expo-dev-launcher@57.0.9
+  - expo-dev-menu@57.0.9

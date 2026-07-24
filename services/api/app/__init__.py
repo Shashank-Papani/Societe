@@ -1,0 +1,1 @@
+"""Société API application package."""

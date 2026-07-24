@@ -1,0 +1,23 @@
+---
+description: Société project architecture and implementation rules
+alwaysApply: true
+---
+
+The authoritative architecture is:
+
+@docs/societe_cursor_master_architecture.md
+
+Before implementing any phase:
+
+1. Read the relevant sections of the architecture document.
+2. Create a written implementation plan.
+3. Implement only the phase requested by the user.
+4. Do not change the selected stack without approval.
+5. Run formatting, linting, type checking, migrations, and tests.
+6. Fix failures before declaring the phase complete.
+7. Never commit secrets or production credentials.
+8. Keep the backend authoritative for location, privacy, moderation,
+   blocking, and Calling Card eligibility.
+9. Do not implement later phases prematurely.---
+alwaysApply: true
+---

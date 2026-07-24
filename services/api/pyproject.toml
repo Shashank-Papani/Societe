@@ -1,0 +1,33 @@
+[project]
+name = "societe-api"
+version = "0.1.0"
+description = "Société FastAPI modular monolith"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "fastapi==0.139.2",
+  "uvicorn[standard]==0.51.0",
+  "pydantic==2.13.4",
+  "pydantic-settings==2.14.2",
+  "sqlalchemy[asyncio]==2.0.51",
+  "asyncpg==0.31.0",
+  "alembic==1.18.5",
+  "redis==8.0.1",
+  "structlog==26.1.0",
+  "opentelemetry-api==1.44.0",
+  "opentelemetry-sdk==1.44.0",
+  "opentelemetry-exporter-otlp-proto-http==1.44.0",
+  "opentelemetry-instrumentation-fastapi==0.65b0",
+  "python-jose[cryptography]==3.5.0",
+  "httpx==0.28.1",
+  "uuid-utils==0.14.1",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+[tool.uv]
+package = true

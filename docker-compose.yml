@@ -1,0 +1,109 @@
+# Pin image versions via .env (see docs/dependency-upgrades.md). Never use floating :latest.
+
+name: societe
+
+services:
+  postgres:
+    image: ${POSTGRES_IMAGE:-postgis/postgis:16-3.5}
+    # Official PostGIS images are amd64-only; Docker Desktop emulates on Apple Silicon.
+    platform: linux/amd64
+    container_name: societe-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-societe}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-societe}
+      POSTGRES_DB: ${POSTGRES_DB:-societe}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - societe_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-societe} -d ${POSTGRES_DB:-societe}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  valkey:
+    image: ${VALKEY_IMAGE:-valkey/valkey:8.1.9}
+    container_name: societe-valkey
+    command: ["valkey-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "${VALKEY_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  minio:
+    image: ${MINIO_IMAGE:-minio/minio:RELEASE.2025-09-07T16-13-09Z}
+    container_name: societe-minio
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-societe}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-societe-minio-dev}
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - societe_minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  mailpit:
+    image: ${MAILPIT_IMAGE:-axllent/mailpit:v1.30.5}
+    container_name: societe-mailpit
+    ports:
+      - "${MAILPIT_SMTP_PORT:-1025}:1025"
+      - "${MAILPIT_UI_PORT:-8025}:8025"
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  api:
+    build:
+      context: .
+      dockerfile: infra/docker/api.Dockerfile
+      args:
+        PYTHON_IMAGE: ${API_PYTHON_IMAGE:-python:3.12.13-slim-bookworm}
+    container_name: societe-api
+    env_file:
+      - .env
+    environment:
+      APP_ENV: development
+      AUTH_PROVIDER: local
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-societe}:${POSTGRES_PASSWORD:-societe}@postgres:5432/${POSTGRES_DB:-societe}
+      VALKEY_URL: redis://valkey:6379/0
+      MINIO_ENDPOINT: http://minio:9000
+      MAILPIT_SMTP_HOST: mailpit
+      API_HOST: 0.0.0.0
+      API_PORT: "8000"
+    ports:
+      - "${API_PORT:-8000}:8000"
+    volumes:
+      # Mount sources only — do not overwrite /app/.venv from the image.
+      - ./services/api/app:/app/services/api/app
+      - ./services/api/migrations:/app/services/api/migrations
+      - ./services/api/alembic.ini:/app/services/api/alembic.ini
+      - ./packages/contracts:/contracts
+    depends_on:
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+volumes:
+  societe_postgres_data:
+  societe_minio_data:

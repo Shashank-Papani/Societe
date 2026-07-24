@@ -1,0 +1,6 @@
+{
+  "name": "@societe/contracts",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Generated OpenAPI and shared schemas"
+}

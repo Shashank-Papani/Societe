@@ -1,0 +1,52 @@
+[project]
+name = "societe"
+version = "0.0.0"
+description = "Société monorepo (uv workspace root)"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = []
+
+[tool.uv.workspace]
+members = ["services/api"]
+
+[tool.uv]
+package = false
+
+[dependency-groups]
+dev = [
+  "ruff>=0.12.0",
+  "mypy>=1.16.0",
+  "pytest>=8.4.0",
+  "pytest-asyncio>=1.0.0",
+  "httpx>=0.28.0",
+  "types-redis>=4.6.0",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["services/api"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "ASYNC", "RUF"]
+ignore = ["B008"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+packages = ["app"]
+mypy_path = "services/api"
+exclude = ["migrations/", "tests/"]
+
+[[tool.mypy.overrides]]
+module = ["asyncpg.*", "geoalchemy2.*", "jose.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["services/api/tests"]
+pythonpath = ["services/api"]

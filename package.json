@@ -1,0 +1,16 @@
+{
+  "name": "societe",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Société monorepo",
+  "packageManager": "pnpm@11.17.0",
+  "engines": {
+    "node": ">=24 <25",
+    "pnpm": ">=10"
+  },
+  "scripts": {
+    "lint": "pnpm --filter @societe/mobile lint",
+    "typecheck": "pnpm --filter @societe/mobile typecheck",
+    "test": "pnpm --filter @societe/mobile test --if-present"
+  }
+}

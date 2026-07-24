@@ -1,0 +1,99 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    name: Python lint / typecheck / test
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgis/postgis:16-3.5
+        env:
+          POSTGRES_USER: societe
+          POSTGRES_PASSWORD: societe
+          POSTGRES_DB: societe
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U societe -d societe"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+      valkey:
+        image: valkey/valkey:8.1.9
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "valkey-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      APP_ENV: test
+      AUTH_PROVIDER: local
+      JWT_SECRET: ci-test-secret-not-for-production-0123456789ab
+      DATABASE_URL: postgresql+asyncpg://societe:societe@localhost:5432/societe
+      VALKEY_URL: redis://localhost:6379/0
+      OTEL_ENABLED: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      - name: Sync dependencies
+        run: uv sync --all-packages
+      - name: Ruff
+        run: |
+          uv run ruff check services/api
+          uv run ruff format --check services/api
+      - name: Mypy
+        run: uv run mypy
+      - name: Migrate
+        run: |
+          cd services/api
+          uv run --project ../.. alembic upgrade head
+      - name: Pytest
+        run: uv run pytest
+      - name: OpenAPI drift check
+        run: uv run python scripts/export_openapi.py --check
+
+  mobile:
+    name: Mobile lint / typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.17.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+          cache: pnpm
+      - name: Install
+        run: pnpm install
+      - name: Lint
+        run: pnpm lint
+      - name: Typecheck
+        run: pnpm typecheck
+
+  terraform:
+    name: Terraform validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.15.8"
+      - name: Validate
+        working-directory: infra/terraform/environments/dev
+        run: |
+          terraform init -backend=false -input=false
+          terraform validate

@@ -1,0 +1,60 @@
+# Environment / secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+*.egg-info/
+.python-version.local
+
+# Node / pnpm
+node_modules/
+.pnpm-store/
+*.tsbuildinfo
+.expo/
+dist/
+web-build/
+apps/mobile/ios/
+apps/mobile/android/
+apps/mobile/.expo/
+
+# IDE / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Logs / temp
+*.log
+tmp/
+.temp/
+.cache/
+
+# OpenAPI generation scratch
+packages/contracts/openapi/openapi.generated.json
