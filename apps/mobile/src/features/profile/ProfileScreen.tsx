@@ -3,12 +3,25 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-nati
 
 import { API_BASE_URL } from "@/api/client";
 import { useAuth } from "@/auth/AuthProvider";
-import { fetchMe, useLocalLogin, type MeUser } from "@/auth/localAuth";
+import {
+  DEV_PERSONAS,
+  fetchMe,
+  useLocalLogin,
+  useSwitchDevPersona,
+  type DevPersona,
+  type MeUser,
+} from "@/auth/localAuth";
+
+function personaLabelForHandle(handle: string): string | null {
+  const match = DEV_PERSONAS.find((p) => p.handle === handle);
+  return match ? match.label : null;
+}
 
 export function ProfileScreen() {
   const auth = useAuth();
   const queryClient = useQueryClient();
   const login = useLocalLogin();
+  const switchPersona = useSwitchDevPersona();
 
   const meQuery = useQuery({
     queryKey: ["me"],
@@ -18,7 +31,14 @@ export function ProfileScreen() {
   });
 
   const loginMutation = useMutation({
-    mutationFn: login,
+    mutationFn: (persona?: DevPersona) => login(persona),
+    onSuccess: (user) => {
+      queryClient.setQueryData(["me"], user);
+    },
+  });
+
+  const switchMutation = useMutation({
+    mutationFn: (persona: DevPersona) => switchPersona(persona),
     onSuccess: (user) => {
       queryClient.setQueryData(["me"], user);
     },
@@ -29,6 +49,9 @@ export function ProfileScreen() {
   });
 
   const privacyHint = privacySummary(meQuery.data);
+  const activePersona = meQuery.data ? personaLabelForHandle(meQuery.data.handle) : null;
+  const busy =
+    loginMutation.isPending || switchMutation.isPending || logoutMutation.isPending;
 
   return (
     <View style={styles.container}>
@@ -47,6 +70,33 @@ export function ProfileScreen() {
           <Text style={styles.row}>Status: {meQuery.data.account_status}</Text>
           <Text style={styles.row}>{privacyHint}</Text>
           {meQuery.data.bio ? <Text style={styles.bio}>{meQuery.data.bio}</Text> : null}
+
+          {__DEV__ ? (
+            <View style={styles.devBlock}>
+              <Text style={styles.label}>Active dev persona</Text>
+              <Text style={styles.help}>
+                {activePersona ?? "Custom / .env local user"} · @{meQuery.data.handle}
+              </Text>
+              {DEV_PERSONAS.map((persona) => (
+                <Pressable
+                  key={persona.key}
+                  style={styles.button}
+                  disabled={busy || meQuery.data?.handle === persona.handle}
+                  onPress={() => switchMutation.mutate(persona.key)}
+                >
+                  <Text style={styles.buttonText}>
+                    {switchMutation.isPending && switchMutation.variables === persona.key
+                      ? "Switching…"
+                      : `Switch to ${persona.label}`}
+                  </Text>
+                </Pressable>
+              ))}
+              {switchMutation.error ? (
+                <Text style={styles.error}>{(switchMutation.error as Error).message}</Text>
+              ) : null}
+            </View>
+          ) : null}
+
           <Pressable style={styles.buttonSecondary} onPress={() => logoutMutation.mutate()}>
             <Text style={styles.buttonText}>Sign out</Text>
           </Pressable>
@@ -57,15 +107,36 @@ export function ProfileScreen() {
           <Text style={styles.help}>
             Signs in via POST /v1/auth/local/token when AUTH_PROVIDER=local.
           </Text>
-          <Pressable
-            style={styles.button}
-            onPress={() => loginMutation.mutate()}
-            disabled={loginMutation.isPending}
-          >
-            <Text style={styles.buttonText}>
-              {loginMutation.isPending ? "Signing in…" : "Sign in (local JWT)"}
-            </Text>
-          </Pressable>
+
+          {__DEV__ ? (
+            <>
+              {DEV_PERSONAS.map((persona) => (
+                <Pressable
+                  key={persona.key}
+                  style={styles.button}
+                  disabled={busy}
+                  onPress={() => loginMutation.mutate(persona.key)}
+                >
+                  <Text style={styles.buttonText}>
+                    {loginMutation.isPending && loginMutation.variables === persona.key
+                      ? "Signing in…"
+                      : `Continue as ${persona.label}`}
+                  </Text>
+                </Pressable>
+              ))}
+            </>
+          ) : (
+            <Pressable
+              style={styles.button}
+              onPress={() => loginMutation.mutate(undefined)}
+              disabled={busy}
+            >
+              <Text style={styles.buttonText}>
+                {loginMutation.isPending ? "Signing in…" : "Sign in (local JWT)"}
+              </Text>
+            </Pressable>
+          )}
+
           {loginMutation.error ? (
             <Text style={styles.error}>{(loginMutation.error as Error).message}</Text>
           ) : null}
@@ -113,6 +184,13 @@ const styles = StyleSheet.create({
   },
   block: {
     gap: 10,
+  },
+  devBlock: {
+    gap: 8,
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "#1e293b",
   },
   handle: {
     color: "#f5f7fb",

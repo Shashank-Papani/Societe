@@ -21,6 +21,9 @@ if TYPE_CHECKING:
 def _test_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     monkeypatch.setenv("APP_ENV", "test")
     monkeypatch.setenv("AUTH_PROVIDER", "local")
+    # Isolate from developer .env (e.g. local-dev-user-b for dual-simulator work).
+    monkeypatch.setenv("LOCAL_DEV_SUBJECT", "local-dev-user")
+    monkeypatch.setenv("LOCAL_DEV_HANDLE", "localdev")
     monkeypatch.setenv("JWT_SECRET", "test-secret-not-for-production-0123456789abcdef")
     monkeypatch.setenv("CURSOR_HMAC_SECRET", "test-cursor-hmac-secret-0123456789abcdef01234567")
     monkeypatch.setenv("OTEL_ENABLED", "false")
@@ -29,6 +32,7 @@ def _test_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     # inherited from whatever the developer has in .env.
     monkeypatch.setenv("FF_MEDIA_POSTING", "true")
     monkeypatch.setenv("FF_CALLING_CARDS", "true")
+    monkeypatch.setenv("FF_PRIVATE_MESSAGING", "true")
     monkeypatch.setenv("MEDIA_MALWARE_SCANNER", "noop")
     monkeypatch.setenv("MEDIA_MODERATION_PROVIDER", "fake")
     monkeypatch.setenv("MINIO_PUBLIC_ENDPOINT", "http://localhost:9000")

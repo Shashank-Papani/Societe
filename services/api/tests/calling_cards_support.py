@@ -169,11 +169,39 @@ class CallingCardWorld:
                     aggregate_type = 'user_block'
                     AND aggregate_id = ANY(CAST(:users AS uuid[]))
                 )
+                OR (
+                    aggregate_type IN ('conversation', 'message')
+                    AND aggregate_id IN (
+                        SELECT id FROM app.conversations
+                        WHERE user_low_id = ANY(CAST(:users AS uuid[]))
+                           OR user_high_id = ANY(CAST(:users AS uuid[]))
+                        UNION ALL
+                        SELECT id FROM app.messages
+                        WHERE sender_user_id = ANY(CAST(:users AS uuid[]))
+                    )
+                )
                 """
             ),
             {"venues": venue_ids, "users": user_ids},
         )
         for statement in (
+            """
+            DELETE FROM app.conversation_members
+            WHERE user_id = ANY(CAST(:users AS uuid[]))
+            """,
+            """
+            DELETE FROM app.messages
+            WHERE conversation_id IN (
+                SELECT id FROM app.conversations
+                WHERE user_low_id = ANY(CAST(:users AS uuid[]))
+                   OR user_high_id = ANY(CAST(:users AS uuid[]))
+            )
+            """,
+            """
+            DELETE FROM app.conversations
+            WHERE user_low_id = ANY(CAST(:users AS uuid[]))
+               OR user_high_id = ANY(CAST(:users AS uuid[]))
+            """,
             """
             DELETE FROM app.connection_grants
             WHERE calling_card_id IN (

@@ -128,6 +128,12 @@ class Settings(BaseSettings):
     calling_card_rate_limit_per_user_per_venue_night: int = 10
     sensitive_action_lease_min_remaining_seconds: int = 30
     discoverable_list_limit: int = 50
+
+    # Private messaging (Phase 5). Accepted grants are durable (ADR 0014).
+    message_body_max_length: int = 2000
+    message_rate_limit_per_user_per_minute: int = 30
+    conversation_list_page_max: int = 50
+    message_list_page_max: int = 50
     realtime_provider: Literal["local", "appsync"] = "local"
     push_provider: Literal["local", "noop"] = "local"
     # After realtime publish, wait for POST /v1/events/{id}/ack before push fallback.
@@ -147,6 +153,7 @@ class Settings(BaseSettings):
     ff_live_crowd_counts: bool = False
     ff_calling_cards: bool = False
     ff_venue_people_discovery: bool = False
+    ff_private_messaging: bool = False
     ff_qr_verification: bool = False
     ff_ble_verification: bool = False
     ff_media_posting: bool = False
@@ -284,6 +291,13 @@ class Settings(BaseSettings):
                 "EVENT_DISPATCHER_HEARTBEAT_MAX_AGE_SECONDS",
                 self.event_dispatcher_heartbeat_max_age_seconds,
             ),
+            ("MESSAGE_BODY_MAX_LENGTH", self.message_body_max_length),
+            (
+                "MESSAGE_RATE_LIMIT_PER_USER_PER_MINUTE",
+                self.message_rate_limit_per_user_per_minute,
+            ),
+            ("CONVERSATION_LIST_PAGE_MAX", self.conversation_list_page_max),
+            ("MESSAGE_LIST_PAGE_MAX", self.message_list_page_max),
         ):
             if value <= 0:
                 msg = f"{name} must be greater than zero."

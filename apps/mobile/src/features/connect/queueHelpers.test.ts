@@ -4,10 +4,12 @@ import { describe, it } from "node:test";
 import {
   classifyHttpFailure,
   computeNextAttemptDelayMs,
+  findRespondOperationsToAcknowledge,
   formatExpiryCountdown,
   isOperationExpired,
   mapServerCardStatusToUi,
   parseQueuePayload,
+  respondDecisionMatchesTerminalStatus,
   serializeQueuePayload,
   uiLabelForConnectState,
 } from "./queueHelpers.ts";
@@ -88,5 +90,78 @@ describe("formatExpiryCountdown", () => {
     const now = Date.parse("2024-01-01T00:00:00.000Z");
     const label = formatExpiryCountdown("2024-01-01T00:05:30.000Z", now);
     assert.equal(label, "5m 30s left");
+  });
+});
+
+describe("respond queue reconciliation after NETWORK following server commit", () => {
+  it("matches accept→accepted and decline→declined only", () => {
+    assert.equal(respondDecisionMatchesTerminalStatus("accept", "accepted"), true);
+    assert.equal(respondDecisionMatchesTerminalStatus("decline", "declined"), true);
+    assert.equal(respondDecisionMatchesTerminalStatus("accept", "pending"), false);
+    assert.equal(respondDecisionMatchesTerminalStatus("accept", "declined"), false);
+    assert.equal(respondDecisionMatchesTerminalStatus("decline", "accepted"), false);
+  });
+
+  it("clears failed_retryable NETWORK respond when authoritative card is accepted", () => {
+    const cardId = "card-accepted-1";
+    const staleRespond = {
+      id: "op-1",
+      operationType: "calling_card.respond",
+      state: "failed_retryable",
+      payloadJson: serializeQueuePayload({
+        calling_card_id: cardId,
+        decision: "accept",
+        action: "accept_only",
+        share_scopes: [],
+      }),
+    };
+    const unrelatedCreate = {
+      id: "op-2",
+      operationType: "calling_card.create",
+      state: "failed_retryable",
+      payloadJson: serializeQueuePayload({
+        recipient_user_id: "u2",
+        reason_code: "say_hello",
+      }),
+    };
+    const pendingRespond = {
+      id: "op-3",
+      operationType: "calling_card.respond",
+      state: "failed_retryable",
+      payloadJson: serializeQueuePayload({
+        calling_card_id: "card-still-pending",
+        decision: "accept",
+        action: "accept_only",
+        share_scopes: [],
+      }),
+    };
+
+    const toAck = findRespondOperationsToAcknowledge(
+      [staleRespond, unrelatedCreate, pendingRespond],
+      [
+        { id: cardId, status: "accepted" },
+        { id: "card-still-pending", status: "pending" },
+      ],
+    );
+
+    assert.deepEqual(toAck, ["op-1"]);
+  });
+
+  it("does not acknowledge when decision and status disagree", () => {
+    const toAck = findRespondOperationsToAcknowledge(
+      [
+        {
+          id: "op-decline",
+          operationType: "calling_card.respond",
+          state: "queued",
+          payloadJson: serializeQueuePayload({
+            calling_card_id: "c1",
+            decision: "decline",
+          }),
+        },
+      ],
+      [{ id: "c1", status: "accepted" }],
+    );
+    assert.deepEqual(toAck, []);
   });
 });

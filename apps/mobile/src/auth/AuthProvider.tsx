@@ -13,6 +13,7 @@ import {
   type ReactNode,
 } from "react";
 
+import { clearActiveAuthSubject } from "@/auth/deviceStore";
 import { clearAccessToken, getAccessToken, saveAccessToken } from "@/auth/tokenStore";
 
 export type AuthStatus = "initializing" | "authenticated" | "unauthenticated";
@@ -27,7 +28,14 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-const PROTECTED_QUERY_PREFIXES = ["me", "map-venues", "venue", "presence"] as const;
+const PROTECTED_QUERY_PREFIXES = [
+  "me",
+  "map-venues",
+  "venue",
+  "presence",
+  "connect",
+  "messages",
+] as const;
 
 let liveAccessToken: string | null = null;
 let unauthorizedHandler: (() => Promise<void>) | null = null;
@@ -58,6 +66,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const handleUnauthorized = useCallback(async () => {
     await clearAccessToken();
+    await clearActiveAuthSubject();
     setAccessToken(null);
     setStatus("unauthenticated");
     clearProtectedQueries();
@@ -105,6 +114,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         queryClient.invalidateQueries({ queryKey: ["map-venues"] }),
         queryClient.invalidateQueries({ queryKey: ["venue"] }),
         queryClient.invalidateQueries({ queryKey: ["presence"] }),
+        queryClient.invalidateQueries({ queryKey: ["connect"] }),
+        queryClient.invalidateQueries({ queryKey: ["messages"] }),
       ]);
     },
     [queryClient, setAccessToken],
@@ -112,6 +123,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const clearSession = useCallback(async () => {
     await clearAccessToken();
+    await clearActiveAuthSubject();
     setAccessToken(null);
     setStatus("unauthenticated");
     clearProtectedQueries();

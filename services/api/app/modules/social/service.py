@@ -26,12 +26,12 @@ from app.db.models import (
     UserBlock,
     UserPrivacySettings,
 )
+from app.modules.messaging.service import MessagingService
 from app.modules.presence.leases import PresenceLeaseStore, venue_discoverable_key
 from app.modules.social.authz import CallingCardAuthorizer, require_calling_cards_enabled
 from app.modules.social.lifecycle import (
     CallingCardLifecycleService,
     compute_calling_card_expiry,
-    next_venue_night_end,
 )
 from app.modules.social.schemas import (
     BlockResponse,
@@ -258,7 +258,9 @@ class SocialService:
             raise
 
         self._lifecycle.transition(card, "accepted", now=now, response_action=request.action)
-        grant_expires = next_venue_night_end(now, auth.venue_timezone, self._settings)
+        # ADR 0014: accepted grants are durable for messaging (expires_at NULL).
+        # Presence was revalidated via authorize_respond; venue night no longer bounds the grant.
+        _ = auth
         low, high = sorted((card.sender_user_id, card.recipient_user_id))
         scopes = list(request.share_scopes) if request.action == "share_info" else []
         grant = ConnectionGrant(
@@ -267,7 +269,7 @@ class SocialService:
             user_b_id=high,
             scopes=scopes,
             created_at=now,
-            expires_at=grant_expires,
+            expires_at=None,
         )
         self._session.add(grant)
         await self._session.flush()
@@ -283,6 +285,13 @@ class SocialService:
                 "response_action": card.response_action,
                 "grant_id": str(grant.id),
             },
+        )
+        messaging = MessagingService(self._session, self._redis, self._settings)
+        await messaging.emit_messaging_enabled_for_pair(
+            card.sender_user_id,
+            card.recipient_user_id,
+            now=now,
+            reason="connection_accepted",
         )
         await self._session.commit()
         return RespondCallingCardResponse(
@@ -470,6 +479,13 @@ class SocialService:
 
         await self._cancel_pending_between(user.id, blocked_user_id, now=now)
         await self._revoke_grants_between(user.id, blocked_user_id, now=now)
+        messaging = MessagingService(self._session, self._redis, self._settings)
+        await messaging.emit_messaging_disabled_for_pair(
+            user.id,
+            blocked_user_id,
+            now=now,
+            reason="user_blocked",
+        )
 
         # Drop mutual discoverability memberships if either is listed.
         await self._drop_discoverability(user.id)
@@ -504,6 +520,14 @@ class SocialService:
         if block is not None:
             await self._session.delete(block)
             removed = True
+            await self._restore_grants_revoked_by_block(user.id, blocked_user_id)
+            messaging = MessagingService(self._session, self._redis, self._settings)
+            await messaging.emit_messaging_enabled_for_pair(
+                user.id,
+                blocked_user_id,
+                now=now,
+                reason="user_unblocked",
+            )
             self._session.add(
                 OutboxEvent(
                     aggregate_type="user_block",
@@ -562,6 +586,21 @@ class SocialService:
         for grant in result.scalars().all():
             grant.revoked_at = now
             grant.revoked_reason = "user_blocked"
+
+    async def _restore_grants_revoked_by_block(self, a: UUID, b: UUID) -> None:
+        """Restore grants revoked solely by block so unblock can resume messaging."""
+        low, high = sorted((a, b))
+        result = await self._session.execute(
+            select(ConnectionGrant).where(
+                ConnectionGrant.user_a_id == low,
+                ConnectionGrant.user_b_id == high,
+                ConnectionGrant.revoked_reason == "user_blocked",
+            )
+        )
+        for grant in result.scalars().all():
+            grant.revoked_at = None
+            grant.revoked_reason = None
+            grant.expires_at = None
 
     async def _drop_discoverability(self, user_id: UUID) -> None:
         try:
