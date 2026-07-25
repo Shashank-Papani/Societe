@@ -1,16 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 
+import * as Crypto from "expo-crypto";
+
 import { useAuth } from "@/auth/AuthProvider";
+import { getStoredDeviceId } from "@/auth/deviceStore";
 import {
   fetchPresenceMe,
   leavePresence,
   submitPresenceEvidence,
+  submitSimulatedPresence,
 } from "@/features/presence/api";
 import { getLocationProvider } from "@/location/LocationProvider";
-
-/** Local-dev device id placeholder — register a real device via API in production flows. */
-const DEV_DEVICE_ID = "00000000-0000-4000-8000-000000000001";
 
 let clientSequence = 0;
 
@@ -26,30 +27,73 @@ export function PresenceScreen() {
 
   const refreshMutation = useMutation({
     mutationFn: async () => {
+      const deviceId = await getStoredDeviceId();
+    
+      if (!deviceId) {
+        throw new Error("Register a device first (sign in on Profile).");
+      }
+    
       const provider = getLocationProvider();
       const sample = await provider.getCurrentSample();
+    
       if (!sample) {
         throw new Error("Location permission denied or unavailable.");
       }
+    
       clientSequence += 1;
+    
+      const horizontalAccuracy =
+        Number.isFinite(sample.horizontal_accuracy_m) &&
+        sample.horizontal_accuracy_m > 0
+          ? sample.horizontal_accuracy_m
+          : 8;
+    
+      const altitude =
+        sample.altitude_m !== null && Number.isFinite(sample.altitude_m)
+          ? sample.altitude_m
+          : null;
+    
+      const speed =
+        sample.speed_mps !== null &&
+        Number.isFinite(sample.speed_mps) &&
+        sample.speed_mps >= 0
+          ? sample.speed_mps
+          : null;
+    
+      // Development builds use the backend's protected simulator endpoint.
+      if (__DEV__) {
+        return submitSimulatedPresence({
+          latitude: sample.latitude,
+          longitude: sample.longitude,
+          horizontal_accuracy_m: horizontalAccuracy,
+          altitude_m: altitude,
+          speed_mps: speed,
+          provider: "simulated",
+          candidate_venue_id: null,
+          client_sequence: clientSequence,
+          device_id: deviceId,
+        });
+      }
+    
+      // Release builds use the normal strict presence endpoint.
       return submitPresenceEvidence({
-        evidence_id: crypto.randomUUID(),
+        evidence_id: Crypto.randomUUID(),
         observed_at: sample.observed_at,
         location: {
           latitude: sample.latitude,
           longitude: sample.longitude,
-          horizontal_accuracy_m: sample.horizontal_accuracy_m,
-          altitude_m: sample.altitude_m,
-          speed_mps: sample.speed_mps,
+          horizontal_accuracy_m: horizontalAccuracy,
+          altitude_m: altitude,
+          speed_mps: speed,
           provider: sample.provider === "fused" ? "fused" : "gps",
         },
         platform_signals: {
-          is_mock: sample.is_mock,
+          is_mock: sample.is_mock ?? false,
           is_simulated: false,
           app_state: "foreground",
         },
         client_sequence: clientSequence,
-        device_id: DEV_DEVICE_ID,
+        device_id: deviceId,
       });
     },
     onSuccess: (data) => {

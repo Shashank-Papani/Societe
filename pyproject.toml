@@ -42,11 +42,11 @@ mypy_path = "services/api"
 exclude = ["migrations/", "tests/"]
 
 [[tool.mypy.overrides]]
-module = ["asyncpg.*", "geoalchemy2.*", "jose.*"]
+module = ["asyncpg.*", "boto3.*", "botocore.*", "geoalchemy2.*", "jose.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["services/api/tests"]
-pythonpath = ["services/api"]
+pythonpath = ["services/api", "services/workers", "packages/test-fixtures"]

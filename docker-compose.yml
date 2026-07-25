@@ -54,6 +54,33 @@ services:
       retries: 20
       start_period: 10s
 
+  # One-shot: create the private quarantine/processed buckets with the same
+  # adapter the API uses, then exit.
+  minio-init:
+    build:
+      context: .
+      dockerfile: infra/docker/api.Dockerfile
+      args:
+        PYTHON_IMAGE: ${API_PYTHON_IMAGE:-python:3.12.13-slim-bookworm}
+    container_name: societe-minio-init
+    env_file:
+      - .env
+    environment:
+      APP_ENV: development
+      FF_LOCATION_SIMULATOR: ${FF_LOCATION_SIMULATOR:-false}
+      AUTH_PROVIDER: local
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT:-http://localhost:9000}
+    working_dir: /app
+    entrypoint: ["python", "scripts/init_object_storage.py"]
+    volumes:
+      - ./services/api/app:/app/services/api/app
+      - ./scripts:/app/scripts
+    depends_on:
+      minio:
+        condition: service_healthy
+    restart: "no"
+
   mailpit:
     image: ${MAILPIT_IMAGE:-axllent/mailpit:v1.30.5}
     container_name: societe-mailpit
@@ -81,6 +108,9 @@ services:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-societe}:${POSTGRES_PASSWORD:-societe}@postgres:5432/${POSTGRES_DB:-societe}
       VALKEY_URL: redis://valkey:6379/0
       MINIO_ENDPOINT: http://minio:9000
+      # Must be reachable from the device running the app: localhost for iOS
+      # simulator, 10.0.2.2 for the Android emulator, LAN IP for a real phone.
+      MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT:-http://localhost:9000}
       MAILPIT_SMTP_HOST: mailpit
       API_HOST: 0.0.0.0
       API_PORT: "8000"
@@ -130,6 +160,48 @@ services:
         condition: service_healthy
       api:
         condition: service_healthy
+
+  media-processor:
+    build:
+      context: .
+      dockerfile: infra/docker/api.Dockerfile
+      args:
+        PYTHON_IMAGE: ${API_PYTHON_IMAGE:-python:3.12.13-slim-bookworm}
+    container_name: societe-media-processor
+    env_file:
+      - .env
+    environment:
+      APP_ENV: development
+      AUTH_PROVIDER: local
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-societe}:${POSTGRES_PASSWORD:-societe}@postgres:5432/${POSTGRES_DB:-societe}
+      VALKEY_URL: redis://valkey:6379/0
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT:-http://localhost:9000}
+      MEDIA_WORKER_HEARTBEAT_PATH: /tmp/societe-media-processor.heartbeat
+      PYTHONPATH: /app/services/workers
+    entrypoint: ["python", "-m", "media_processor"]
+    volumes:
+      - ./services/api/app:/app/services/api/app
+      - ./services/workers:/app/services/workers
+    depends_on:
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+      api:
+        condition: service_healthy
+    healthcheck:
+      # Liveness alone would call a wedged worker healthy; the heartbeat is
+      # refreshed by each loop pass.
+      test: ["CMD", "python", "-m", "media_processor.healthcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
 volumes:
   societe_postgres_data:

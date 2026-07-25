@@ -293,7 +293,9 @@ async def upsert_venue(session: AsyncSession, spec: dict) -> None:
     assert venue is not None
 
     # Replace hours with Thu–Sat nightlife pattern
-    await session.execute(text("DELETE FROM app.venue_hours WHERE venue_id = :id"), {"id": str(venue.id)})
+    await session.execute(
+        text("DELETE FROM app.venue_hours WHERE venue_id = :id"), {"id": str(venue.id)}
+    )
     for weekday in (3, 4, 5):  # Thu, Fri, Sat (Mon=0)
         session.add(
             VenueHours(
@@ -334,7 +336,9 @@ async def main() -> None:
         await upsert_user(session, settings.local_dev_subject, "localdev", "Local Dev")
         await session.commit()
 
-    cache = VenueStaticCache(get_redis(settings), ttl_seconds=settings.venue_static_cache_ttl_seconds)
+    cache = VenueStaticCache(
+        get_redis(settings), ttl_seconds=settings.venue_static_cache_ttl_seconds
+    )
     await cache.invalidate_all_static()
     print(f"Seeded {len(VENUES)} venues and synthetic users.")
 

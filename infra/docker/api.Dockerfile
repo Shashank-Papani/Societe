@@ -11,8 +11,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+# ffmpeg/ffprobe are the local stand-in for MediaConvert. Pillow ships manylinux
+# wheels, so no image codec headers are needed at build time.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl build-essential libpq-dev \
+    && apt-get install -y --no-install-recommends curl build-essential libpq-dev ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=ghcr.io/astral-sh/uv:0.11.32 /uv /usr/local/bin/uv

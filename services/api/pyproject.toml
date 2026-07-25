@@ -22,6 +22,8 @@ dependencies = [
   "uuid-utils==0.14.1",
   "geoalchemy2==0.18.0",
   "shapely==2.1.1",
+  "boto3==1.43.55",
+  "pillow==12.3.0",
 ]
 
 [build-system]

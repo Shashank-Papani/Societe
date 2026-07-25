@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import Literal
 from uuid import UUID
 
 from redis.asyncio import Redis
@@ -83,6 +84,24 @@ WHERE e.id = due.id AND e.purge_at = due.purge_at
 class ExpireResult:
     degraded: int
     exited: int
+
+
+@dataclass(frozen=True)
+class PostingAuthorization:
+    """Outcome of the Live Vibe posting check.
+
+    ``attribution_mode`` is a snapshot: Ghost Mode at authorization time decides
+    whether the post carries a handle, and toggling the setting later must not
+    change an existing post.
+    """
+
+    allowed: bool
+    reason: str | None = None
+    venue_id: UUID | None = None
+    check_in_id: UUID | None = None
+    attribution_mode: Literal["attributed", "anonymous"] | None = None
+    verification_level: str | None = None
+    lease_state: str | None = None
 
 
 class PresenceService:
@@ -209,6 +228,82 @@ class PresenceService:
         if privacy is None:
             return False
         return False if privacy.ghost_mode else privacy.allow_calling_cards
+
+    async def can_post_live_vibe(
+        self,
+        user: User,
+        venue_id: UUID,
+        device: UserDevice,
+        *,
+        now: datetime | None = None,
+    ) -> PostingAuthorization:
+        """Authorize posting a Live Vibe to ``venue_id``.
+
+        This is a different question from ``social_features_enabled``. Posting
+        needs a live *verified* lease at the requested venue from a device the
+        account owns; it does not need the user to be discoverable. Ghost Mode,
+        ``discoverable_in_venue``, and ``allow_calling_cards`` never block a post
+        — Ghost Mode only makes the post anonymous.
+
+        Every failure mode is closed: a provisional or degraded lease, an
+        expired verified window, a different venue, or an unreachable Valkey all
+        refuse. A stale check-in row is never accepted as proof of presence.
+        """
+        moment = now or datetime.now(UTC)
+
+        if user.account_status != "active" or user.deleted_at is not None:
+            return PostingAuthorization(allowed=False, reason="account_not_active")
+        if device.user_id != user.id:
+            return PostingAuthorization(allowed=False, reason="device_not_owned")
+        if device.revoked_at is not None:
+            return PostingAuthorization(allowed=False, reason="device_revoked")
+
+        try:
+            lease = await self._leases.read(user.id)
+        except RedisError:
+            logger.error("posting_lease_read_failed", user_id=str(user.id))
+            return PostingAuthorization(allowed=False, reason="presence_cache_unavailable")
+
+        if lease is None:
+            # Either never present or the lease already expired. Both require the
+            # client to re-prove before it can attach media to a venue.
+            return PostingAuthorization(allowed=False, reason="presence_refresh_required")
+        if lease.state != "verified":
+            return PostingAuthorization(
+                allowed=False,
+                reason=f"presence_{lease.state}",
+                lease_state=lease.state,
+            )
+        if moment >= lease.verified_until:
+            return PostingAuthorization(
+                allowed=False,
+                reason="presence_refresh_required",
+                lease_state=lease.state,
+            )
+        if lease.venue_id != venue_id:
+            return PostingAuthorization(
+                allowed=False,
+                reason="presence_venue_mismatch",
+                lease_state=lease.state,
+            )
+        if lease.check_in_id is None:
+            return PostingAuthorization(
+                allowed=False,
+                reason="presence_refresh_required",
+                lease_state=lease.state,
+            )
+
+        return PostingAuthorization(
+            allowed=True,
+            venue_id=lease.venue_id,
+            check_in_id=lease.check_in_id,
+            attribution_mode="anonymous" if lease.ghost_mode else "attributed",
+            verification_level=lease.verification_level,
+            lease_state=lease.state,
+        )
+
+    async def load_owned_device(self, user: User, device_id: UUID) -> UserDevice:
+        return await self._load_device(user, device_id)
 
     async def leave(self, user: User, *, received_at: datetime) -> PresenceData:
         active = await self._engine.load_active_check_in(user.id, for_update=True)

@@ -38,4 +38,29 @@ output "phase0_status" {
   description = "Phase 0 placeholder — no resources managed yet"
 }
 
-# Module wiring arrives in Phase 6. Keep module directories present for structure.
+# Phase 3 stubs: validate module shape only. Real wiring and apply are Phase 6.
+module "media_buckets" {
+  source      = "../../modules/media_buckets"
+  environment = var.environment
+}
+
+module "mediaconvert" {
+  source      = "../../modules/mediaconvert"
+  environment = var.environment
+}
+
+module "media_cloudfront" {
+  source      = "../../modules/cloudfront"
+  environment = var.environment
+}
+
+output "phase3_media_status" {
+  value = {
+    media_buckets = module.media_buckets.phase3_status
+    mediaconvert  = module.mediaconvert.phase3_status
+    cloudfront    = module.media_cloudfront.phase3_status
+  }
+  description = "Phase 3 media Terraform stubs — validate only, never applied here"
+}
+
+# Remaining module wiring arrives in Phase 6. Keep module directories present for structure.

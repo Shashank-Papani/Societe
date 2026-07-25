@@ -61,8 +61,8 @@ test:
 	cd "$(ROOT_DIR)" && $(UV) run pytest
 
 lint:
-	cd "$(ROOT_DIR)" && $(UV) run ruff check services/api
-	cd "$(ROOT_DIR)" && $(UV) run ruff format --check services/api
+	cd "$(ROOT_DIR)" && $(UV) run ruff check services/api services/workers packages/test-fixtures
+	cd "$(ROOT_DIR)" && $(UV) run ruff format --check services/api services/workers packages/test-fixtures
 	@if [ -d "$(ROOT_DIR)/apps/mobile" ]; then cd "$(ROOT_DIR)" && $(PNPM) lint; fi
 
 typecheck:

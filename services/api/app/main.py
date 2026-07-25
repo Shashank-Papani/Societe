@@ -22,8 +22,10 @@ from app.core.middleware import RequestContextMiddleware
 from app.core.telemetry import setup_telemetry
 from app.db.session import dispose_resources
 from app.modules.identity.router import router as identity_router
+from app.modules.media.router import router as media_router
 from app.modules.presence.router import router as presence_router
 from app.modules.venues.router import router as venues_router
+from app.modules.vibes.router import router as vibes_router
 
 logger = get_logger(__name__)
 
@@ -70,6 +72,8 @@ def create_app() -> FastAPI:
     application.include_router(identity_router)
     application.include_router(venues_router)
     application.include_router(presence_router)
+    application.include_router(media_router)
+    application.include_router(vibes_router)
 
     setup_telemetry(application, settings)
     return application

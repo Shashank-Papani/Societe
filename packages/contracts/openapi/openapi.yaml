@@ -10,6 +10,102 @@ components:
       - confirmation
       title: AccountDeletionRequest
       type: object
+    CompleteUploadRequest:
+      additionalProperties: false
+      properties:
+        checksum_sha256:
+          anyOf:
+          - pattern: ^[0-9a-f]{64}$
+            type: string
+          - type: 'null'
+          title: Checksum Sha256
+        device_id:
+          format: uuid
+          title: Device Id
+          type: string
+      required:
+      - device_id
+      title: CompleteUploadRequest
+      type: object
+    CreateReportRequest:
+      additionalProperties: false
+      properties:
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+        reason:
+          enum:
+          - spam
+          - harassment
+          - sexual_content
+          - violence
+          - hate
+          - illegal
+          - other
+          title: Reason
+          type: string
+      required:
+      - reason
+      title: CreateReportRequest
+      type: object
+    CreateUploadRequest:
+      additionalProperties: false
+      properties:
+        byte_size:
+          exclusiveMinimum: 0.0
+          title: Byte Size
+          type: integer
+        caption:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Caption
+        checksum_sha256:
+          anyOf:
+          - pattern: ^[0-9a-f]{64}$
+            type: string
+          - type: 'null'
+          title: Checksum Sha256
+        device_id:
+          format: uuid
+          title: Device Id
+          type: string
+        media_type:
+          enum:
+          - image
+          - video
+          title: Media Type
+          type: string
+        mime_type:
+          maxLength: 100
+          minLength: 3
+          title: Mime Type
+          type: string
+        original_filename:
+          anyOf:
+          - maxLength: 255
+            type: string
+          - type: 'null'
+          title: Original Filename
+        venue_id:
+          format: uuid
+          title: Venue Id
+          type: string
+        vibe_tags:
+          items:
+            type: string
+          title: Vibe Tags
+          type: array
+      required:
+      - venue_id
+      - device_id
+      - media_type
+      - mime_type
+      - byte_size
+      title: CreateUploadRequest
+      type: object
     DeviceCreate:
       properties:
         app_version:
@@ -775,6 +871,164 @@ paths:
       summary: Patch Privacy
       tags:
       - identity
+  /v1/me/vibes:
+    get:
+      description: 'Creator history: expired vibes stay as metadata; media URLs are
+        retention-gated.'
+      operationId: my_vibes_v1_me_vibes_get
+      parameters:
+      - in: query
+        name: cursor
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Cursor
+      - in: query
+        name: limit
+        required: false
+        schema:
+          default: 12
+          maximum: 30
+          minimum: 1
+          title: Limit
+          type: integer
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response My Vibes V1 Me Vibes Get
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: My Vibes
+      tags:
+      - vibes
+  /v1/media/uploads:
+    post:
+      operationId: create_upload_v1_media_uploads_post
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Idempotency-Key
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUploadRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Create Upload V1 Media Uploads Post
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Create Upload
+      tags:
+      - media
+  /v1/media/uploads/{upload_id}:
+    get:
+      operationId: get_upload_v1_media_uploads__upload_id__get
+      parameters:
+      - in: path
+        name: upload_id
+        required: true
+        schema:
+          format: uuid
+          title: Upload Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Get Upload V1 Media Uploads  Upload Id  Get
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Get Upload
+      tags:
+      - media
+  /v1/media/uploads/{upload_id}/complete:
+    post:
+      operationId: complete_upload_v1_media_uploads__upload_id__complete_post
+      parameters:
+      - in: path
+        name: upload_id
+        required: true
+        schema:
+          format: uuid
+          title: Upload Id
+          type: string
+      - in: header
+        name: Idempotency-Key
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Idempotency-Key
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompleteUploadRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Complete Upload V1 Media Uploads  Upload Id  Complete
+                  Post
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Complete Upload
+      tags:
+      - media
   /v1/presence/evidence:
     post:
       operationId: submit_evidence_v1_presence_evidence_post
@@ -901,3 +1155,129 @@ paths:
       summary: Get Venue
       tags:
       - venues
+  /v1/venues/{venue_id}/vibes:
+    get:
+      description: Authenticated read. Presence is not required to browse a venue's
+        feed.
+      operationId: venue_vibes_v1_venues__venue_id__vibes_get
+      parameters:
+      - in: path
+        name: venue_id
+        required: true
+        schema:
+          format: uuid
+          title: Venue Id
+          type: string
+      - in: query
+        name: cursor
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Cursor
+      - in: query
+        name: limit
+        required: false
+        schema:
+          default: 12
+          maximum: 30
+          minimum: 1
+          title: Limit
+          type: integer
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Venue Vibes V1 Venues  Venue Id  Vibes Get
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Venue Vibes
+      tags:
+      - vibes
+  /v1/vibes/{vibe_id}:
+    delete:
+      operationId: delete_vibe_v1_vibes__vibe_id__delete
+      parameters:
+      - in: path
+        name: vibe_id
+        required: true
+        schema:
+          format: uuid
+          title: Vibe Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Delete Vibe V1 Vibes  Vibe Id  Delete
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Delete Vibe
+      tags:
+      - vibes
+  /v1/vibes/{vibe_id}/reports:
+    post:
+      operationId: report_vibe_v1_vibes__vibe_id__reports_post
+      parameters:
+      - in: path
+        name: vibe_id
+        required: true
+        schema:
+          format: uuid
+          title: Vibe Id
+          type: string
+      - in: header
+        name: Idempotency-Key
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Idempotency-Key
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateReportRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Report Vibe V1 Vibes  Vibe Id  Reports Post
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Report Vibe
+      tags:
+      - vibes

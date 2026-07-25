@@ -80,7 +80,7 @@ async def _loop(
                 deleted = await run_purge_cycle(settings)
                 if deleted:
                     logger.info("location_evidence_purged", deleted=deleted)
-        except Exception as exc:  # noqa: BLE001 - a bad cycle must not kill the worker
+        except Exception as exc:
             logger.error("aggregator_cycle_failed", cycle=name, error=str(exc))
         with contextlib.suppress(TimeoutError):
             await asyncio.wait_for(stop.wait(), timeout=interval_seconds)

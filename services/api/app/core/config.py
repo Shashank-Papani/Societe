@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 from typing import Literal
+from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import Field, SecretStr, model_validator
@@ -59,10 +60,66 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://societe:societe@localhost:5432/societe"
     valkey_url: str = "redis://localhost:6379/0"
 
+    # Internal endpoint the API and workers dial (http://minio:9000 under Compose).
     minio_endpoint: str = "http://localhost:9000"
+    # Client-reachable endpoint used for every presigned URL handed to a device.
+    # Never the internal Compose hostname: a phone cannot resolve `minio`.
+    minio_public_endpoint: str = "http://localhost:9000"
+    minio_region: str = "us-east-1"
     minio_root_user: str = "societe"
     minio_root_password: SecretStr = Field(default=SecretStr("societe-minio-dev"))
     minio_bucket: str = "societe-local"
+    media_quarantine_bucket: str = "societe-quarantine"
+    media_processed_bucket: str = "societe-processed"
+
+    # Media ingestion (Phase 3). Sizes are bytes.
+    media_upload_intent_ttl_seconds: int = 900
+    media_presigned_put_ttl_seconds: int = 900
+    media_signed_url_ttl_seconds: int = 300
+    media_max_image_bytes: int = 12_000_000
+    media_max_video_bytes: int = 40_000_000
+    media_max_video_duration_ms: int = 15_000
+    media_max_image_dimension: int = 8192
+    media_max_image_pixels: int = 40_000_000
+    media_allowed_image_mime_types: list[str] = Field(
+        default_factory=lambda: ["image/jpeg", "image/png", "image/webp"]
+    )
+    media_allowed_video_mime_types: list[str] = Field(
+        default_factory=lambda: ["video/mp4", "video/quicktime"]
+    )
+    media_caption_max_length: int = 300
+    media_max_vibe_tags: int = 10
+    media_vibe_tag_max_length: int = 30
+    media_upload_rate_limit_per_user_per_hour: int = 20
+    media_upload_rate_limit_per_user_per_venue_per_hour: int = 10
+    media_pending_intent_limit_per_user: int = 3
+
+    # Processing. ffmpeg/ffprobe are system binaries; arguments are fixed in code.
+    ffmpeg_binary_path: str = "ffmpeg"
+    ffprobe_binary_path: str = "ffprobe"
+    media_ffmpeg_timeout_seconds: int = 90
+    media_processing_max_attempts: int = 5
+    media_processing_retry_backoff_seconds: int = 30
+    media_worker_poll_interval_seconds: int = 5
+    media_worker_batch_size: int = 5
+    media_worker_heartbeat_path: str = "/tmp/societe-media-processor.heartbeat"
+    media_worker_heartbeat_max_age_seconds: int = 120
+
+    media_malware_scanner: Literal["noop", "clamav"] = "noop"
+    media_moderation_provider: Literal["fake", "rekognition"] = "fake"
+    media_moderation_policy_version: str = "phase3-v1"
+
+    # Publication window and retention.
+    vibe_expiry_local_hour: int = 6
+    vibe_absolute_max_lifetime_hours: int = 12
+    vibe_report_auto_hide_threshold: int = 0
+    vibe_report_description_max_length: int = 500
+    vibe_report_rate_limit_per_user_per_hour: int = 20
+    vibe_feed_page_max: int = 30
+    retention_incomplete_upload_hours: int = 24
+    retention_processed_original_hours: int = 24
+    retention_rejected_original_days: int = 3
+    retention_processed_derivative_days: int = 7
 
     otel_enabled: bool = False
     otel_service_name: str = "societe-api"
@@ -111,6 +168,70 @@ class Settings(BaseSettings):
             ("PRESENCE_SAMPLE_BUFFER_MAX", self.presence_sample_buffer_max),
             ("PRESENCE_SAMPLE_BUFFER_TTL_SECONDS", self.presence_sample_buffer_ttl_seconds),
             ("EVIDENCE_ABSOLUTE_MAX_RETENTION_HOURS", self.evidence_absolute_max_retention_hours),
+        ):
+            if value <= 0:
+                msg = f"{name} must be greater than zero."
+                raise ValueError(msg)
+        return self
+
+    @model_validator(mode="after")
+    def reject_placeholder_malware_scanner_outside_development(self) -> Settings:
+        """A no-op scanner outside dev/test would publish unscanned bytes."""
+        if self.media_malware_scanner == "noop" and self.app_env not in {"development", "test"}:
+            msg = (
+                "MEDIA_MALWARE_SCANNER=noop is forbidden when APP_ENV is "
+                f"{self.app_env!r}. Configure a real scanner before enabling uploads."
+            )
+            raise ValueError(msg)
+        if self.media_moderation_provider == "fake" and self.app_env not in {
+            "development",
+            "test",
+        }:
+            msg = (
+                "MEDIA_MODERATION_PROVIDER=fake is forbidden when APP_ENV is "
+                f"{self.app_env!r}. Media must not be published on a stub decision."
+            )
+            raise ValueError(msg)
+        return self
+
+    @model_validator(mode="after")
+    def validate_media_settings(self) -> Settings:
+        host = urlsplit(self.minio_public_endpoint).hostname
+        if host in {"minio", "societe-minio"}:
+            msg = (
+                "MINIO_PUBLIC_ENDPOINT must be reachable from a device "
+                f"(got {self.minio_public_endpoint!r}). Compose-internal hostnames "
+                "are not routable from an emulator or a phone."
+            )
+            raise ValueError(msg)
+        if not self.minio_public_endpoint.startswith(("http://", "https://")):
+            msg = "MINIO_PUBLIC_ENDPOINT must include an http:// or https:// scheme."
+            raise ValueError(msg)
+        if self.media_quarantine_bucket == self.media_processed_bucket:
+            msg = "MEDIA_QUARANTINE_BUCKET and MEDIA_PROCESSED_BUCKET must differ."
+            raise ValueError(msg)
+        if not 0 <= self.vibe_expiry_local_hour <= 23:
+            msg = "VIBE_EXPIRY_LOCAL_HOUR must be between 0 and 23."
+            raise ValueError(msg)
+        if self.vibe_report_auto_hide_threshold < 0:
+            msg = "VIBE_REPORT_AUTO_HIDE_THRESHOLD must be >= 0 (0 disables auto-hide)."
+            raise ValueError(msg)
+        for name, value in (
+            ("MEDIA_UPLOAD_INTENT_TTL_SECONDS", self.media_upload_intent_ttl_seconds),
+            ("MEDIA_PRESIGNED_PUT_TTL_SECONDS", self.media_presigned_put_ttl_seconds),
+            ("MEDIA_SIGNED_URL_TTL_SECONDS", self.media_signed_url_ttl_seconds),
+            ("MEDIA_MAX_IMAGE_BYTES", self.media_max_image_bytes),
+            ("MEDIA_MAX_VIDEO_BYTES", self.media_max_video_bytes),
+            ("MEDIA_MAX_VIDEO_DURATION_MS", self.media_max_video_duration_ms),
+            ("MEDIA_MAX_IMAGE_DIMENSION", self.media_max_image_dimension),
+            ("MEDIA_MAX_IMAGE_PIXELS", self.media_max_image_pixels),
+            ("MEDIA_FFMPEG_TIMEOUT_SECONDS", self.media_ffmpeg_timeout_seconds),
+            ("MEDIA_PROCESSING_MAX_ATTEMPTS", self.media_processing_max_attempts),
+            ("VIBE_ABSOLUTE_MAX_LIFETIME_HOURS", self.vibe_absolute_max_lifetime_hours),
+            ("RETENTION_INCOMPLETE_UPLOAD_HOURS", self.retention_incomplete_upload_hours),
+            ("RETENTION_PROCESSED_ORIGINAL_HOURS", self.retention_processed_original_hours),
+            ("RETENTION_REJECTED_ORIGINAL_DAYS", self.retention_rejected_original_days),
+            ("RETENTION_PROCESSED_DERIVATIVE_DAYS", self.retention_processed_derivative_days),
         ):
             if value <= 0:
                 msg = f"{name} must be greater than zero."

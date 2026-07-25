@@ -43,9 +43,7 @@ def write_outputs(schema: dict) -> None:
         OUT_YAML.write_text(
             "# Generated from FastAPI. Prefer openapi.json for machine use.\n"
             f"# paths: {', '.join(sorted(schema.get('paths', {})))}\n"
-            "openapi: "
-            + json.dumps(schema.get("openapi", "3.1.0"))
-            + "\n"
+            "openapi: " + json.dumps(schema.get("openapi", "3.1.0")) + "\n"
             "info:\n"
             f"  title: {json.dumps(schema.get('info', {}).get('title', 'Société API'))}\n"
             f"  version: {json.dumps(schema.get('info', {}).get('version', '0.1.0'))}\n"

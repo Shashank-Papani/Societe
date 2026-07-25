@@ -11,3 +11,5 @@ ADRs document durable technical decisions for Société.
 | 0005 | Server-authoritative presence and privacy |
 | 0006 | Monorepo tooling (pnpm + uv) |
 | 0007 | Phase 1 map cache and identity boundaries |
+| 0008 | Phase 2 presence evidence, leases, and expiry |
+| 0009 | Phase 3 Live Vibes media pipeline |

@@ -63,3 +63,25 @@ export async function leavePresence(): Promise<PresenceSnapshot> {
   });
   return presenceSchema.parse(envelope.data);
 }
+
+export async function submitSimulatedPresence(body: {
+  latitude: number;
+  longitude: number;
+  horizontal_accuracy_m: number;
+  altitude_m: number | null;
+  speed_mps: number | null;
+  provider: "fused" | "gps" | "network" | "simulated";
+  candidate_venue_id?: string | null;
+  client_sequence: number;
+  device_id: string;
+}): Promise<PresenceSnapshot> {
+  const envelope = await apiFetch<PresenceSnapshot>(
+    "/v1/dev/location/simulate",
+    {
+      method: "POST",
+      body: JSON.stringify(body),
+    },
+  );
+
+  return presenceSchema.parse(envelope.data);
+}

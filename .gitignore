@@ -58,3 +58,7 @@ tmp/
 
 # OpenAPI generation scratch
 packages/contracts/openapi/openapi.generated.json
+
+# Generated media fixtures — never commit media binaries
+packages/test-fixtures/output/
+apps/mobile/.env.local

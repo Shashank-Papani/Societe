@@ -1,1 +1,1 @@
-"""vibes module placeholder (implemented in later phases)."""
+"""Live Vibes: venue feed, reports, and author deletion."""
