@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import Constants from "expo-constants";
+import { useRouter } from "expo-router";
 import { useEffect, useState, type ReactNode } from "react";
 import {
   ActivityIndicator,
@@ -10,9 +10,10 @@ import {
   View,
 } from "react-native";
 
-import { REALTIME_URL } from "@/api/client";
-import { getLiveAccessToken, useAuth } from "@/auth/AuthProvider";
+import { useAuth } from "@/auth/AuthProvider";
 import { fetchMe } from "@/auth/localAuth";
+import { createConversation } from "@/features/messages/api";
+import { subscribeRealtime } from "@/realtime/client";
 import {
   blockUser,
   CALLING_CARD_REASON_CODES,
@@ -29,6 +30,7 @@ import {
   enqueueRespondCallingCard,
   flushOfflineQueue,
   listActiveQueuedOperations,
+  reconcileRespondOperationsWithCards,
   type QueuedOperation,
 } from "@/features/connect/offlineQueue";
 import {
@@ -56,6 +58,7 @@ function localOpUiState(op: QueuedOperation): ConnectUiState {
     case "expired":
       return "expired";
     case "acknowledged":
+    case "server_confirmed":
       return "delivered";
     default:
       return "queued";
@@ -64,6 +67,7 @@ function localOpUiState(op: QueuedOperation): ConnectUiState {
 
 export function ConnectScreen() {
   const auth = useAuth();
+  const router = useRouter();
   const queryClient = useQueryClient();
   const [selectedUser, setSelectedUser] = useState<DiscoverableUser | null>(null);
   const [reasonCode, setReasonCode] = useState<string>(CALLING_CARD_REASON_CODES[0]);
@@ -154,36 +158,42 @@ export function ConnectScreen() {
     if (auth.status !== "authenticated") {
       return;
     }
-    const token = getLiveAccessToken();
-    const extra = Constants.expoConfig?.extra as { realtimeUrl?: string } | undefined;
-    const base = extra?.realtimeUrl ?? REALTIME_URL;
-    if (!token || !base || typeof WebSocket === "undefined") {
-      return;
-    }
-
-    const separator = base.includes("?") ? "&" : "?";
-    const url = `${base}${separator}access_token=${encodeURIComponent(token)}`;
-
-    let closed = false;
-    let socket: WebSocket | null = null;
-    try {
-      socket = new WebSocket(url);
-    } catch {
-      return;
-    }
-
-    socket.onmessage = () => {
-      if (!closed) {
-        void queryClient.invalidateQueries({ queryKey: ["connect", "inbox"] });
-        void queryClient.invalidateQueries({ queryKey: ["connect", "sent"] });
+    return subscribeRealtime((envelope) => {
+      const type = envelope.event_type ?? "";
+      if (type.startsWith("calling_card.") || type.startsWith("user.") || type.startsWith("conversation.") || type.startsWith("message.")) {
+        void queryClient.invalidateQueries({ queryKey: ["connect"] });
+        void queryClient.invalidateQueries({ queryKey: ["messages"] });
       }
-    };
-
-    return () => {
-      closed = true;
-      socket?.close();
-    };
+    });
   }, [auth.status, queryClient]);
+
+  // Clear stale respond queue rows when inbox/sent already shows terminal status
+  // (network failure after the server committed accept/decline).
+  useEffect(() => {
+    if (auth.status !== "authenticated") {
+      return;
+    }
+    const cards = [...(inboxQuery.data?.items ?? []), ...(sentQuery.data?.items ?? [])];
+    if (cards.length === 0) {
+      return;
+    }
+    void reconcileRespondOperationsWithCards(cards).then((cleared) => {
+      if (cleared > 0) {
+        void queryClient.invalidateQueries({ queryKey: ["connect", "queue"] });
+      }
+    });
+  }, [auth.status, inboxQuery.data?.items, sentQuery.data?.items, queryClient]);
+
+  const openMessageMutation = useMutation({
+    mutationFn: async (otherUserId: string) => {
+      const conversation = await createConversation({ otherUserId });
+      return conversation.id;
+    },
+    onSuccess: (id) => {
+      router.push(`/messages/${id}`);
+    },
+    onError: (error: Error) => setActionError(error.message),
+  });
 
   const invalidateConnect = async () => {
     await Promise.all([
@@ -270,6 +280,12 @@ export function ConnectScreen() {
       <Text style={styles.subtitle}>
         Same-venue Calling Cards · server-authoritative eligibility
       </Text>
+
+      {auth.status === "authenticated" ? (
+        <Pressable style={styles.button} onPress={() => router.push("/messages")}>
+          <Text style={styles.buttonText}>Messages</Text>
+        </Pressable>
+      ) : null}
 
       {auth.status === "initializing" || presenceQuery.isLoading ? (
         <ActivityIndicator color="#9aa6bf" />
@@ -428,6 +444,31 @@ export function ConnectScreen() {
         />
       ))}
 
+      {(inboxQuery.data?.items ?? [])
+        .filter((card) => card.status === "accepted")
+        .map((card) => (
+          <CardRow
+            key={`accepted-${card.id}`}
+            card={card}
+            nowMs={nowMs}
+            actions={
+              <Pressable
+                style={styles.button}
+                onPress={() =>
+                  openMessageMutation.mutate(
+                    card.sender_user_id === meQuery.data?.id
+                      ? card.recipient_user_id
+                      : card.sender_user_id,
+                  )
+                }
+                disabled={openMessageMutation.isPending}
+              >
+                <Text style={styles.buttonText}>Message</Text>
+              </Pressable>
+            }
+          />
+        ))}
+
       <Text style={styles.section}>Sent</Text>
       <Text style={styles.help}>
         Only cards confirmed by the server appear here. Local queue items stay above until ack.
@@ -452,6 +493,14 @@ export function ConnectScreen() {
                 disabled={cancelMutation.isPending}
               >
                 <Text style={styles.buttonSecondaryText}>Cancel</Text>
+              </Pressable>
+            ) : card.status === "accepted" ? (
+              <Pressable
+                style={styles.button}
+                onPress={() => openMessageMutation.mutate(card.recipient_user_id)}
+                disabled={openMessageMutation.isPending}
+              >
+                <Text style={styles.buttonText}>Message</Text>
               </Pressable>
             ) : null
           }

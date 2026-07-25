@@ -61,6 +61,23 @@ components:
       - recipient_user_id
       title: CreateCallingCardRequest
       type: object
+    CreateConversationRequest:
+      additionalProperties: false
+      properties:
+        connection_grant_id:
+          anyOf:
+          - format: uuid
+            type: string
+          - type: 'null'
+          title: Connection Grant Id
+        other_user_id:
+          anyOf:
+          - format: uuid
+            type: string
+          - type: 'null'
+          title: Other User Id
+      title: CreateConversationRequest
+      type: object
     CreateReportRequest:
       additionalProperties: false
       properties:
@@ -273,13 +290,30 @@ components:
       title: LeaveRequest
       type: object
     LocalDevTokenRequest:
+      additionalProperties: false
       properties:
         note:
           anyOf:
           - type: string
           - type: 'null'
           title: Note
+        persona:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Persona
       title: LocalDevTokenRequest
+      type: object
+    MarkReadRequest:
+      additionalProperties: false
+      properties:
+        last_read_message_id:
+          anyOf:
+          - format: uuid
+            type: string
+          - type: 'null'
+          title: Last Read Message Id
+      title: MarkReadRequest
       type: object
     PlatformSignals:
       additionalProperties: false
@@ -398,6 +432,24 @@ components:
       required:
       - decision
       title: RespondCallingCardRequest
+      type: object
+    SendMessageRequest:
+      additionalProperties: false
+      properties:
+        body:
+          maxLength: 4000
+          minLength: 1
+          title: Body
+          type: string
+        client_message_id:
+          maxLength: 128
+          minLength: 8
+          title: Client Message Id
+          type: string
+      required:
+      - body
+      - client_message_id
+      title: SendMessageRequest
       type: object
     ShareCallingCardRequest:
       additionalProperties: false
@@ -561,7 +613,7 @@ paths:
               anyOf:
               - $ref: '#/components/schemas/LocalDevTokenRequest'
               - type: 'null'
-              title: ' Body'
+              title: Body
       responses:
         '200':
           content:
@@ -832,6 +884,309 @@ paths:
       summary: Calling Card Status
       tags:
       - social
+  /v1/conversations:
+    get:
+      operationId: list_conversations_v1_conversations_get
+      parameters:
+      - in: query
+        name: cursor
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Cursor
+      - in: query
+        name: limit
+        required: false
+        schema:
+          default: 30
+          maximum: 100
+          minimum: 1
+          title: Limit
+          type: integer
+      - in: query
+        name: include_archived
+        required: false
+        schema:
+          default: false
+          title: Include Archived
+          type: boolean
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response List Conversations V1 Conversations Get
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: List Conversations
+      tags:
+      - messaging
+    post:
+      operationId: create_conversation_v1_conversations_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateConversationRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Create Conversation V1 Conversations Post
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Create Conversation
+      tags:
+      - messaging
+  /v1/conversations/{conversation_id}:
+    get:
+      operationId: get_conversation_v1_conversations__conversation_id__get
+      parameters:
+      - in: path
+        name: conversation_id
+        required: true
+        schema:
+          format: uuid
+          title: Conversation Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Get Conversation V1 Conversations  Conversation Id  Get
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Get Conversation
+      tags:
+      - messaging
+  /v1/conversations/{conversation_id}/archive:
+    post:
+      operationId: archive_conversation_v1_conversations__conversation_id__archive_post
+      parameters:
+      - in: path
+        name: conversation_id
+        required: true
+        schema:
+          format: uuid
+          title: Conversation Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Archive Conversation V1 Conversations  Conversation
+                  Id  Archive Post
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Archive Conversation
+      tags:
+      - messaging
+  /v1/conversations/{conversation_id}/messages:
+    get:
+      operationId: list_messages_v1_conversations__conversation_id__messages_get
+      parameters:
+      - in: path
+        name: conversation_id
+        required: true
+        schema:
+          format: uuid
+          title: Conversation Id
+          type: string
+      - in: query
+        name: cursor
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Cursor
+      - in: query
+        name: limit
+        required: false
+        schema:
+          default: 50
+          maximum: 100
+          minimum: 1
+          title: Limit
+          type: integer
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response List Messages V1 Conversations  Conversation Id  Messages
+                  Get
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: List Messages
+      tags:
+      - messaging
+    post:
+      operationId: send_message_v1_conversations__conversation_id__messages_post
+      parameters:
+      - in: path
+        name: conversation_id
+        required: true
+        schema:
+          format: uuid
+          title: Conversation Id
+          type: string
+      - in: header
+        name: Idempotency-Key
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Idempotency-Key
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendMessageRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Send Message V1 Conversations  Conversation Id  Messages
+                  Post
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Send Message
+      tags:
+      - messaging
+  /v1/conversations/{conversation_id}/read:
+    post:
+      operationId: mark_read_v1_conversations__conversation_id__read_post
+      parameters:
+      - in: path
+        name: conversation_id
+        required: true
+        schema:
+          format: uuid
+          title: Conversation Id
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MarkReadRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Mark Read V1 Conversations  Conversation Id  Read
+                  Post
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Mark Read
+      tags:
+      - messaging
+  /v1/conversations/{conversation_id}/unarchive:
+    post:
+      operationId: unarchive_conversation_v1_conversations__conversation_id__unarchive_post
+      parameters:
+      - in: path
+        name: conversation_id
+        required: true
+        schema:
+          format: uuid
+          title: Conversation Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Unarchive Conversation V1 Conversations  Conversation
+                  Id  Unarchive Post
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Unarchive Conversation
+      tags:
+      - messaging
   /v1/dev/location/simulate:
     post:
       description: Development-only. Runs the production engine with is_simulated=true.

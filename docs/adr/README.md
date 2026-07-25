@@ -17,3 +17,7 @@ ADRs document durable technical decisions for Société.
 | 0011 | Transactional outbox dispatch |
 | 0012 | Realtime provider abstraction |
 | 0013 | Mobile offline command queue |
+| 0014 | Durable connection grants for messaging |
+| 0015 | Conversation lifecycle and dynamic messaging authz |
+| 0016 | Message idempotency via client_message_id |
+| 0017 | Read state and unread strategy |

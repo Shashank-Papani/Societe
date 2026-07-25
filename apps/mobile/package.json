@@ -55,6 +55,6 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test src/features/experience/mediaValidation.test.ts src/features/connect/queueHelpers.test.ts"
+    "test": "node --experimental-strip-types --test src/features/experience/mediaValidation.test.ts src/features/connect/queueHelpers.test.ts src/features/messages/messageHelpers.test.ts src/auth/deviceKeys.test.ts"
   }
 }

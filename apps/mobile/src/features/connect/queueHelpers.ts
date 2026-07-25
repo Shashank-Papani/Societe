@@ -3,12 +3,14 @@
 export type QueueOperationType =
   | "calling_card.create"
   | "calling_card.respond"
-  | "calling_card.cancel";
+  | "calling_card.cancel"
+  | "message.send";
 
 export type QueueTerminalState =
   | "queued"
   | "sending"
   | "acknowledged"
+  | "server_confirmed"
   | "failed_retryable"
   | "failed_permanent"
   | "expired";
@@ -113,6 +115,74 @@ export function parseQueuePayload(payloadJson: string): Record<string, unknown> 
     throw new Error("Invalid queue payload JSON");
   }
   return sanitizeQueuePayload(parsed as Record<string, unknown>);
+}
+
+/**
+ * True when the authoritative card status already matches the queued respond
+ * decision (accept→accepted, decline→declined). Used to clear stale queue rows
+ * after a network failure that occurred after the server committed.
+ */
+export function respondDecisionMatchesTerminalStatus(
+  decision: string,
+  status: string,
+): boolean {
+  if (decision === "accept") {
+    return status === "accepted";
+  }
+  if (decision === "decline") {
+    return status === "declined";
+  }
+  return false;
+}
+
+export type ReconcileQueueOp = {
+  id: string;
+  operationType: string;
+  payloadJson: string;
+  state: string;
+};
+
+export type ReconcileCard = {
+  id: string;
+  status: string;
+};
+
+/**
+ * Returns ids of active ``calling_card.respond`` ops that should be acknowledged
+ * because inbox/sent already shows a matching terminal status.
+ */
+export function findRespondOperationsToAcknowledge(
+  operations: ReconcileQueueOp[],
+  cards: ReconcileCard[],
+): string[] {
+  const statusById = new Map(cards.map((card) => [card.id, card.status]));
+  const activeStates = new Set(["queued", "sending", "failed_retryable"]);
+  const ids: string[] = [];
+
+  for (const op of operations) {
+    if (op.operationType !== "calling_card.respond") {
+      continue;
+    }
+    if (!activeStates.has(op.state)) {
+      continue;
+    }
+    let payload: Record<string, unknown>;
+    try {
+      payload = parseQueuePayload(op.payloadJson);
+    } catch {
+      continue;
+    }
+    const cardId = String(payload.calling_card_id ?? "");
+    const decision = String(payload.decision ?? "");
+    const status = statusById.get(cardId);
+    if (!status) {
+      continue;
+    }
+    if (respondDecisionMatchesTerminalStatus(decision, status)) {
+      ids.push(op.id);
+    }
+  }
+  return ids;
 }
 
 export function mapServerCardStatusToUi(status: string): ConnectUiState {

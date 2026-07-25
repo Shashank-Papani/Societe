@@ -29,6 +29,24 @@ export default function RootLayout() {
               headerStyle: { backgroundColor: "#0b1220" },
             }}
           />
+          <Stack.Screen
+            name="messages/index"
+            options={{
+              headerShown: true,
+              title: "Messages",
+              headerStyle: { backgroundColor: "#0b1220" },
+              headerTintColor: "#f5f7fb",
+            }}
+          />
+          <Stack.Screen
+            name="messages/[conversationId]"
+            options={{
+              headerShown: true,
+              title: "Conversation",
+              headerStyle: { backgroundColor: "#0b1220" },
+              headerTintColor: "#f5f7fb",
+            }}
+          />
         </Stack>
       </AuthProvider>
     </QueryClientProvider>

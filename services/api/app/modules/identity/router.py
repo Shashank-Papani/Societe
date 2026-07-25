@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, Request, Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth.deps import (
@@ -20,6 +20,7 @@ from app.core.auth.deps import (
 from app.core.config import Settings, get_settings
 from app.core.errors import AppError
 from app.core.security import create_access_token
+from app.modules.identity.dev_personas import resolve_dev_persona
 from app.modules.identity.service import IdentityService, serialize_device, serialize_user
 from app.shared.idempotency import IdempotencyContext, IdempotencyService
 from app.shared.schemas import ApiMeta, success_response
@@ -28,6 +29,11 @@ router = APIRouter(prefix="/v1", tags=["identity"])
 
 
 class LocalDevTokenRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    # Optional allowlisted persona for dual-simulator DX. Never accept free-form
+    # subjects/handles from the client — only the server allowlist maps keys.
+    persona: str | None = None
     note: str | None = None
 
 
@@ -37,6 +43,7 @@ class TokenData(BaseModel):
     expires_in_minutes: int
     subject: str
     handle: str
+    persona: str | None = None
 
 
 class ProfilePatch(BaseModel):
@@ -77,7 +84,7 @@ async def issue_local_dev_token(
     request: Request,
     session: Annotated[AsyncSession, Depends(get_db)],
     settings: Annotated[Settings, Depends(get_settings)],
-    _body: LocalDevTokenRequest | None = None,
+    body: LocalDevTokenRequest | None = None,
 ) -> dict[str, Any]:
     if settings.auth_provider != "local":
         raise AppError("NOT_FOUND", "Local auth is disabled.", status_code=404)
@@ -87,22 +94,41 @@ async def issue_local_dev_token(
             "Local auth is only available in development/test.",
             status_code=403,
         )
+
     service = IdentityService(session)
-    user = await service.resolve_or_provision(settings.local_dev_subject)
-    # Keep local handle aligned with configured local-dev handle for DX.
-    if user.handle != settings.local_dev_handle:
-        user.handle = settings.local_dev_handle
+    persona_key: str | None = body.persona if body is not None else None
+
+    if persona_key is not None:
+        # Persona selection is the same development/test gate as local auth.
+        persona = resolve_dev_persona(persona_key)
+        subject = persona.subject
+        handle = persona.handle
+        display_name = persona.display_name
+    else:
+        # Preserve legacy single-user local auth (.env LOCAL_DEV_*).
+        subject = settings.local_dev_subject
+        handle = settings.local_dev_handle
+        display_name = None
+        persona_key = None
+
+    user = await service.resolve_or_provision(subject)
+    changed = False
+    if user.handle != handle:
+        user.handle = handle
+        changed = True
+    if display_name is not None and user.display_name != display_name:
+        user.display_name = display_name
+        changed = True
+    if changed:
         await session.commit()
-    token = create_access_token(
-        subject=settings.local_dev_subject,
-        handle=settings.local_dev_handle,
-        settings=settings,
-    )
+
+    token = create_access_token(subject=subject, handle=handle, settings=settings)
     data = TokenData(
         access_token=token,
         expires_in_minutes=settings.jwt_access_token_minutes,
-        subject=settings.local_dev_subject,
-        handle=settings.local_dev_handle,
+        subject=subject,
+        handle=handle,
+        persona=persona_key,
     )
     return success_response(data, meta=_meta(request)).model_dump(mode="json")
 

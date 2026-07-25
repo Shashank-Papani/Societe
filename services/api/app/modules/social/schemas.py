@@ -84,7 +84,8 @@ class ConnectionGrantSummary(StrictModel):
     id: UUID
     calling_card_id: UUID
     scopes: list[str]
-    expires_at: datetime
+    # NULL = durable for messaging (ADR 0014).
+    expires_at: datetime | None = None
     revoked_at: datetime | None = None
 
 

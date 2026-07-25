@@ -68,6 +68,7 @@ services:
     environment:
       APP_ENV: development
       FF_LOCATION_SIMULATOR: ${FF_LOCATION_SIMULATOR:-false}
+      FF_PRIVATE_MESSAGING: ${FF_PRIVATE_MESSAGING:-false}
       AUTH_PROVIDER: local
       MINIO_ENDPOINT: http://minio:9000
       MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT:-http://localhost:9000}
@@ -217,6 +218,7 @@ services:
       AUTH_PROVIDER: local
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-societe}:${POSTGRES_PASSWORD:-societe}@postgres:5432/${POSTGRES_DB:-societe}
       VALKEY_URL: redis://valkey:6379/0
+      FF_PRIVATE_MESSAGING: ${FF_PRIVATE_MESSAGING:-false}
       REALTIME_PROVIDER: ${REALTIME_PROVIDER:-local}
       PUSH_PROVIDER: ${PUSH_PROVIDER:-local}
       # Local WS hub lives on the API (WS /v1/realtime/ws); no separate hub service.
