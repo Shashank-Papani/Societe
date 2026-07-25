@@ -24,6 +24,8 @@ from app.db.session import dispose_resources
 from app.modules.identity.router import router as identity_router
 from app.modules.media.router import router as media_router
 from app.modules.presence.router import router as presence_router
+from app.modules.realtime.router import router as realtime_router
+from app.modules.social.router import router as social_router
 from app.modules.venues.router import router as venues_router
 from app.modules.vibes.router import router as vibes_router
 
@@ -74,6 +76,8 @@ def create_app() -> FastAPI:
     application.include_router(presence_router)
     application.include_router(media_router)
     application.include_router(vibes_router)
+    application.include_router(social_router)
+    application.include_router(realtime_router)
 
     setup_telemetry(application, settings)
     return application

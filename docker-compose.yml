@@ -203,6 +203,45 @@ services:
       retries: 3
       start_period: 30s
 
+  event-dispatcher:
+    build:
+      context: .
+      dockerfile: infra/docker/api.Dockerfile
+      args:
+        PYTHON_IMAGE: ${API_PYTHON_IMAGE:-python:3.12.13-slim-bookworm}
+    container_name: societe-event-dispatcher
+    env_file:
+      - .env
+    environment:
+      APP_ENV: development
+      AUTH_PROVIDER: local
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-societe}:${POSTGRES_PASSWORD:-societe}@postgres:5432/${POSTGRES_DB:-societe}
+      VALKEY_URL: redis://valkey:6379/0
+      REALTIME_PROVIDER: ${REALTIME_PROVIDER:-local}
+      PUSH_PROVIDER: ${PUSH_PROVIDER:-local}
+      # Local WS hub lives on the API (WS /v1/realtime/ws); no separate hub service.
+      REALTIME_ACK_WAIT_SECONDS: ${REALTIME_ACK_WAIT_SECONDS:-2}
+      REALTIME_ACK_TTL_SECONDS: ${REALTIME_ACK_TTL_SECONDS:-300}
+      EVENT_DISPATCHER_HEARTBEAT_PATH: /tmp/societe-event-dispatcher.heartbeat
+      PYTHONPATH: /app/services/workers
+    entrypoint: ["python", "-m", "event_dispatcher"]
+    volumes:
+      - ./services/api/app:/app/services/api/app
+      - ./services/workers:/app/services/workers
+    depends_on:
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-m", "event_dispatcher.healthcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
 volumes:
   societe_postgres_data:
   societe_minio_data:

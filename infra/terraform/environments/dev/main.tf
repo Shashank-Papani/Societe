@@ -63,4 +63,18 @@ output "phase3_media_status" {
   description = "Phase 3 media Terraform stubs — validate only, never applied here"
 }
 
+# Phase 4 stub: AppSync Events shape only. Real wiring and apply are Phase 6.
+module "appsync_events" {
+  source      = "../../modules/appsync_events"
+  environment = var.environment
+}
+
+output "phase4_realtime_status" {
+  value = {
+    appsync_events = module.appsync_events.phase4_status
+    http_endpoint  = module.appsync_events.events_http_endpoint
+  }
+  description = "Phase 4 AppSync Events Terraform stub — validate only, never applied here"
+}
+
 # Remaining module wiring arrives in Phase 6. Keep module directories present for structure.

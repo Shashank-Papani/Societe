@@ -15,6 +15,25 @@
         "title": "AccountDeletionRequest",
         "type": "object"
       },
+      "BlockUserRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "reason_code": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason Code"
+          }
+        },
+        "title": "BlockUserRequest",
+        "type": "object"
+      },
       "CompleteUploadRequest": {
         "additionalProperties": false,
         "properties": {
@@ -40,6 +59,45 @@
           "device_id"
         ],
         "title": "CompleteUploadRequest",
+        "type": "object"
+      },
+      "CreateCallingCardRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "reason_code": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason Code"
+          },
+          "reason_text": {
+            "anyOf": [
+              {
+                "maxLength": 280,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason Text"
+          },
+          "recipient_user_id": {
+            "format": "uuid",
+            "title": "Recipient User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "recipient_user_id"
+        ],
+        "title": "CreateCallingCardRequest",
         "type": "object"
       },
       "CreateReportRequest": {
@@ -526,6 +584,80 @@
         "title": "ProfilePatch",
         "type": "object"
       },
+      "RespondCallingCardRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "anyOf": [
+              {
+                "enum": [
+                  "share_info",
+                  "make_move",
+                  "accept_only"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action"
+          },
+          "decision": {
+            "enum": [
+              "accept",
+              "decline"
+            ],
+            "title": "Decision",
+            "type": "string"
+          },
+          "share_scopes": {
+            "items": {
+              "enum": [
+                "instagram",
+                "spotify",
+                "phone",
+                "snapchat",
+                "display_name"
+              ],
+              "type": "string"
+            },
+            "title": "Share Scopes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "decision"
+        ],
+        "title": "RespondCallingCardRequest",
+        "type": "object"
+      },
+      "ShareCallingCardRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "share_scopes": {
+            "items": {
+              "enum": [
+                "instagram",
+                "spotify",
+                "phone",
+                "snapchat",
+                "display_name"
+              ],
+              "type": "string"
+            },
+            "maxItems": 10,
+            "minItems": 0,
+            "title": "Share Scopes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "share_scopes"
+        ],
+        "title": "ShareCallingCardRequest",
+        "type": "object"
+      },
       "SimulatorRequest": {
         "additionalProperties": false,
         "description": "Development-only spatial input; replayed through the production engine.",
@@ -770,6 +902,414 @@
         ]
       }
     },
+    "/v1/calling-cards": {
+      "post": {
+        "operationId": "create_calling_card_v1_calling_cards_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCallingCardRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create Calling Card V1 Calling Cards Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Calling Card",
+        "tags": [
+          "social"
+        ]
+      }
+    },
+    "/v1/calling-cards/inbox": {
+      "get": {
+        "operationId": "calling_card_inbox_v1_calling_cards_inbox_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Calling Card Inbox V1 Calling Cards Inbox Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Calling Card Inbox",
+        "tags": [
+          "social"
+        ]
+      }
+    },
+    "/v1/calling-cards/sent": {
+      "get": {
+        "operationId": "calling_card_sent_v1_calling_cards_sent_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Calling Card Sent V1 Calling Cards Sent Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Calling Card Sent",
+        "tags": [
+          "social"
+        ]
+      }
+    },
+    "/v1/calling-cards/{calling_card_id}": {
+      "get": {
+        "operationId": "calling_card_detail_v1_calling_cards__calling_card_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "calling_card_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Calling Card Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Calling Card Detail V1 Calling Cards  Calling Card Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Calling Card Detail",
+        "tags": [
+          "social"
+        ]
+      }
+    },
+    "/v1/calling-cards/{calling_card_id}/cancel": {
+      "post": {
+        "operationId": "cancel_calling_card_v1_calling_cards__calling_card_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "calling_card_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Calling Card Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Cancel Calling Card V1 Calling Cards  Calling Card Id  Cancel Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Cancel Calling Card",
+        "tags": [
+          "social"
+        ]
+      }
+    },
+    "/v1/calling-cards/{calling_card_id}/respond": {
+      "post": {
+        "operationId": "respond_calling_card_v1_calling_cards__calling_card_id__respond_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "calling_card_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Calling Card Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RespondCallingCardRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Respond Calling Card V1 Calling Cards  Calling Card Id  Respond Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Respond Calling Card",
+        "tags": [
+          "social"
+        ]
+      }
+    },
+    "/v1/calling-cards/{calling_card_id}/share": {
+      "post": {
+        "operationId": "share_calling_card_v1_calling_cards__calling_card_id__share_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "calling_card_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Calling Card Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShareCallingCardRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Share Calling Card V1 Calling Cards  Calling Card Id  Share Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Share Calling Card",
+        "tags": [
+          "social"
+        ]
+      }
+    },
+    "/v1/calling-cards/{calling_card_id}/status": {
+      "get": {
+        "operationId": "calling_card_status_v1_calling_cards__calling_card_id__status_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "calling_card_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Calling Card Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Calling Card Status V1 Calling Cards  Calling Card Id  Status Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Calling Card Status",
+        "tags": [
+          "social"
+        ]
+      }
+    },
     "/v1/dev/location/simulate": {
       "post": {
         "description": "Development-only. Runs the production engine with is_simulated=true.",
@@ -816,6 +1356,56 @@
         "summary": "Simulate Location",
         "tags": [
           "presence"
+        ]
+      }
+    },
+    "/v1/events/{event_id}/ack": {
+      "post": {
+        "operationId": "ack_event_v1_events__event_id__ack_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Event Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Ack Event V1 Events  Event Id  Ack Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Ack Event",
+        "tags": [
+          "realtime"
         ]
       }
     },
@@ -1839,6 +2429,142 @@
         "summary": "Get Presence Me",
         "tags": [
           "presence"
+        ]
+      }
+    },
+    "/v1/users/{user_id}/block": {
+      "delete": {
+        "operationId": "unblock_user_v1_users__user_id__block_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Unblock User V1 Users  User Id  Block Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Unblock User",
+        "tags": [
+          "social"
+        ]
+      },
+      "post": {
+        "operationId": "block_user_v1_users__user_id__block_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BlockUserRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Block User V1 Users  User Id  Block Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Block User",
+        "tags": [
+          "social"
+        ]
+      }
+    },
+    "/v1/venues/me/discoverable-users": {
+      "get": {
+        "operationId": "discoverable_users_v1_venues_me_discoverable_users_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Discoverable Users V1 Venues Me Discoverable Users Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Discoverable Users",
+        "tags": [
+          "social"
         ]
       }
     },

@@ -2,9 +2,10 @@
 
 Scope: upload intent, single presigned PUT, validation, sanitising processing,
 moderation before publication, venue feed, creator history, reports, retention,
-media-processor worker, and the mobile Experience tab (synthetic fixture upload
-for local posting). No multipart, no AppSync/push, no Calling Cards, no Terraform
-apply.
+media-processor worker, and the mobile Experience tab with a real gallery picker
+(`expo-image-picker`) uploading via `expo-file-system` (no Blob/base64). A
+bundled JPEG fixture remains as an explicitly labeled `__DEV__`-only path.
+No multipart, no AppSync/push, no Calling Cards, no Terraform apply.
 
 ## 1. Contracts
 

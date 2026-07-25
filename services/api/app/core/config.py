@@ -121,6 +121,25 @@ class Settings(BaseSettings):
     retention_rejected_original_days: int = 3
     retention_processed_derivative_days: int = 7
 
+    # Calling Cards (Phase 4). Venue is always taken from the caller's lease.
+    calling_card_ttl_seconds: int = 1800
+    decline_cooldown_seconds: int = 7200
+    calling_card_rate_limit_per_user_per_10_minutes: int = 3
+    calling_card_rate_limit_per_user_per_venue_night: int = 10
+    sensitive_action_lease_min_remaining_seconds: int = 30
+    discoverable_list_limit: int = 50
+    realtime_provider: Literal["local", "appsync"] = "local"
+    push_provider: Literal["local", "noop"] = "local"
+    # After realtime publish, wait for POST /v1/events/{id}/ack before push fallback.
+    realtime_ack_wait_seconds: float = 2.0
+    realtime_ack_ttl_seconds: int = 300
+    event_dispatcher_poll_interval_seconds: int = 2
+    event_dispatcher_batch_size: int = 20
+    event_dispatcher_max_attempts: int = 12
+    event_dispatcher_retry_backoff_seconds: int = 5
+    event_dispatcher_heartbeat_path: str = "/tmp/societe-event-dispatcher.heartbeat"
+    event_dispatcher_heartbeat_max_age_seconds: int = 120
+
     otel_enabled: bool = False
     otel_service_name: str = "societe-api"
     otel_exporter_otlp_endpoint: str | None = None
@@ -236,6 +255,42 @@ class Settings(BaseSettings):
             if value <= 0:
                 msg = f"{name} must be greater than zero."
                 raise ValueError(msg)
+        return self
+
+    @model_validator(mode="after")
+    def validate_calling_card_settings(self) -> Settings:
+        for name, value in (
+            ("CALLING_CARD_TTL_SECONDS", self.calling_card_ttl_seconds),
+            ("DECLINE_COOLDOWN_SECONDS", self.decline_cooldown_seconds),
+            (
+                "CALLING_CARD_RATE_LIMIT_PER_USER_PER_10_MINUTES",
+                self.calling_card_rate_limit_per_user_per_10_minutes,
+            ),
+            (
+                "CALLING_CARD_RATE_LIMIT_PER_USER_PER_VENUE_NIGHT",
+                self.calling_card_rate_limit_per_user_per_venue_night,
+            ),
+            (
+                "SENSITIVE_ACTION_LEASE_MIN_REMAINING_SECONDS",
+                self.sensitive_action_lease_min_remaining_seconds,
+            ),
+            ("DISCOVERABLE_LIST_LIMIT", self.discoverable_list_limit),
+            ("REALTIME_ACK_TTL_SECONDS", self.realtime_ack_ttl_seconds),
+            ("EVENT_DISPATCHER_POLL_INTERVAL_SECONDS", self.event_dispatcher_poll_interval_seconds),
+            ("EVENT_DISPATCHER_BATCH_SIZE", self.event_dispatcher_batch_size),
+            ("EVENT_DISPATCHER_MAX_ATTEMPTS", self.event_dispatcher_max_attempts),
+            ("EVENT_DISPATCHER_RETRY_BACKOFF_SECONDS", self.event_dispatcher_retry_backoff_seconds),
+            (
+                "EVENT_DISPATCHER_HEARTBEAT_MAX_AGE_SECONDS",
+                self.event_dispatcher_heartbeat_max_age_seconds,
+            ),
+        ):
+            if value <= 0:
+                msg = f"{name} must be greater than zero."
+                raise ValueError(msg)
+        if self.realtime_ack_wait_seconds < 0:
+            msg = "REALTIME_ACK_WAIT_SECONDS must be greater than or equal to zero."
+            raise ValueError(msg)
         return self
 
     @model_validator(mode="after")

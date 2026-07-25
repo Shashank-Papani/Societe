@@ -114,21 +114,6 @@ export async function createMediaUpload(input: {
   return uploadCreateSchema.parse(envelope.data);
 }
 
-export async function putUploadBytes(
-  url: string,
-  headers: Record<string, string>,
-  body: Blob,
-): Promise<void> {
-  const response = await fetch(url, {
-    method: "PUT",
-    headers,
-    body,
-  });
-  if (!response.ok) {
-    throw new Error(`Object upload failed (${response.status})`);
-  }
-}
-
 export async function completeMediaUpload(uploadId: string) {
   const deviceId = await getStoredDeviceId();
   if (!deviceId) {

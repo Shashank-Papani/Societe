@@ -28,9 +28,15 @@ def _test_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     # development-only scanner/moderator are selected explicitly rather than
     # inherited from whatever the developer has in .env.
     monkeypatch.setenv("FF_MEDIA_POSTING", "true")
+    monkeypatch.setenv("FF_CALLING_CARDS", "true")
     monkeypatch.setenv("MEDIA_MALWARE_SCANNER", "noop")
     monkeypatch.setenv("MEDIA_MODERATION_PROVIDER", "fake")
     monkeypatch.setenv("MINIO_PUBLIC_ENDPOINT", "http://localhost:9000")
+    monkeypatch.setenv("REALTIME_PROVIDER", "local")
+    monkeypatch.setenv("PUSH_PROVIDER", "local")
+    # Keep dispatcher push-fallback tests fast (ack wait is polled once).
+    monkeypatch.setenv("REALTIME_ACK_WAIT_SECONDS", "0.05")
+    monkeypatch.setenv("REALTIME_ACK_TTL_SECONDS", "60")
     from app.core.config import get_settings
     from app.db.session import reset_resource_globals
 

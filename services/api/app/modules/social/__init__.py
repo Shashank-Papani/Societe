@@ -1,1 +1,1 @@
-"""social module placeholder (implemented in later phases)."""
+"""Calling Cards, discovery, and blocks (Phase 4)."""

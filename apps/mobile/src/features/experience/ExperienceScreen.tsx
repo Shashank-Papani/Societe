@@ -11,8 +11,6 @@ import {
   View,
 } from "react-native";
 
-import * as FileSystem from "expo-file-system/legacy";
-
 import { useAuth } from "@/auth/AuthProvider";
 import {
   completeMediaUpload,
@@ -23,6 +21,14 @@ import {
   type UploadStatus,
   type VibeFeedItem,
 } from "@/features/experience/api";
+import {
+  loadDevFixtureJpeg,
+  mapLifecycleToPhase,
+  pickImageFromLibrary,
+  uploadFileViaFileSystem,
+  type SelectedMediaAsset,
+  type UploadPhase,
+} from "@/features/experience/uploadHelpers";
 import { fetchPresenceMe } from "@/features/presence/api";
 
 const TERMINAL = new Set([
@@ -35,64 +41,36 @@ const TERMINAL = new Set([
   "deleted",
 ]);
 
-const SAMPLE_JPEG_BASE64 =
-  "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAAIAAQDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAn/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIQAxAAAAGcA//EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAQUCf//EABQRAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQMBAT8Bf//EABQRAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQIBAT8Bf//EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEABj8Cf//EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAT8hf//Z";
-
-async function createSampleJpegFile(): Promise<{
-  uri: string;
-  size: number;
-}> {
-  const cacheDirectory = FileSystem.cacheDirectory;
-
-  if (!cacheDirectory) {
-    throw new Error("File-system cache directory is unavailable.");
-  }
-
-  const uri = `${cacheDirectory}societe-vibe-${Date.now()}.jpg`;
-
-  await FileSystem.writeAsStringAsync(uri, SAMPLE_JPEG_BASE64, {
-    encoding: FileSystem.EncodingType.Base64,
-  });
-
-  const info = await FileSystem.getInfoAsync(uri);
-
-  if (
-    !info.exists ||
-    info.isDirectory ||
-    typeof info.size !== "number"
-  ) {
-    await FileSystem.deleteAsync(uri, {
-      idempotent: true,
-    }).catch(() => undefined);
-
-    throw new Error("Could not create the sample JPEG fixture.");
-  }
-
-  return {
-    uri,
-    size: info.size,
-  };
-}
-
-async function uploadFile(params: {
-  uploadUrl: string;
-  fileUri: string;
-  headers: Record<string, string>;
-}): Promise<void> {
-  const result = await FileSystem.uploadAsync(
-    params.uploadUrl,
-    params.fileUri,
-    {
-      httpMethod: "PUT",
-      uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
-      headers: params.headers,
-    },
-  );
-
-  if (result.status < 200 || result.status >= 300) {
-    throw new Error(
-      `Media upload failed with status ${result.status}: ${result.body}`,
-    );
+function phaseLabel(phase: UploadPhase): string {
+  switch (phase) {
+    case "idle":
+      return "Ready";
+    case "picking":
+      return "Opening photo library…";
+    case "permission_denied":
+      return "Photo library permission denied";
+    case "cancelled":
+      return "Selection cancelled";
+    case "validating":
+      return "Validating selected image…";
+    case "creating_intent":
+      return "Creating upload intent…";
+    case "uploading":
+      return "Uploading to storage…";
+    case "completing":
+      return "Confirming upload…";
+    case "processing":
+      return "Processing and moderating…";
+    case "published":
+      return "Published to the venue feed";
+    case "rejected":
+      return "Rejected by validation or moderation";
+    case "failed_retryable":
+      return "Failed — you can retry";
+    case "failed_permanent":
+      return "Failed";
+    default:
+      return phase;
   }
 }
 
@@ -102,6 +80,9 @@ export function ExperienceScreen() {
   const [caption, setCaption] = useState("");
   const [uploadStatus, setUploadStatus] = useState<UploadStatus | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [phase, setPhase] = useState<UploadPhase>("idle");
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [previewUri, setPreviewUri] = useState<string | null>(null);
 
   const presenceQuery = useQuery({
     queryKey: ["presence", "me"],
@@ -111,6 +92,7 @@ export function ExperienceScreen() {
   });
 
   const venueId = presenceQuery.data?.venue?.id ?? null;
+  const venueName = presenceQuery.data?.venue?.name ?? null;
   const canPost = presenceQuery.data?.state === "verified" && Boolean(venueId);
 
   const feedQuery = useQuery({
@@ -121,6 +103,8 @@ export function ExperienceScreen() {
   });
 
   useEffect(() => {
+    // Phase is updated at mutation call sites and inside the poll callback.
+    // Avoid syncing phase via setState in this effect (react-hooks/set-state-in-effect).
     if (!uploadStatus || TERMINAL.has(uploadStatus.lifecycle_status)) {
       return;
     }
@@ -128,60 +112,113 @@ export function ExperienceScreen() {
       void fetchUploadStatus(uploadStatus.upload_id)
         .then((next) => {
           setUploadStatus(next);
-          if (next.lifecycle_status === "ready" || next.publication_status === "published") {
+          const nextPhase = mapLifecycleToPhase(
+            next.lifecycle_status,
+            next.publication_status,
+          );
+          setPhase(nextPhase);
+          if (nextPhase === "published") {
             void queryClient.invalidateQueries({ queryKey: ["vibes", venueId] });
           }
         })
-        .catch((error: Error) => setUploadError(error.message));
+        .catch((error: Error) => {
+          setUploadError(error.message);
+          setPhase("failed_retryable");
+        });
     }, 2_500);
     return () => clearInterval(timer);
   }, [uploadStatus, venueId, queryClient]);
 
-  const uploadMutation = useMutation({
+  const runUpload = async (asset: SelectedMediaAsset) => {
+    if (!venueId) {
+      throw new Error("Verify presence at a venue before posting.");
+    }
+    setPreviewUri(asset.uri);
+    setUploadError(null);
+    setUploadProgress(null);
+    setPhase("creating_intent");
+
+    const intent = await createMediaUpload({
+      venueId,
+      mediaType: asset.mediaType,
+      mimeType: asset.mimeType,
+      byteSize: asset.byteSize,
+      caption: caption.trim() || undefined,
+    });
+
+    setPhase("uploading");
+    await uploadFileViaFileSystem({
+      uploadUrl: intent.upload.url,
+      fileUri: asset.uri,
+      headers: intent.upload.headers,
+      onProgress: (fraction) => setUploadProgress(fraction),
+    });
+
+    setPhase("completing");
+    const status = await completeMediaUpload(intent.upload_id);
+    setUploadStatus(status);
+    setPhase(mapLifecycleToPhase(status.lifecycle_status, status.publication_status));
+    setCaption("");
+    return status;
+  };
+
+  const galleryMutation = useMutation({
     mutationFn: async () => {
-      if (!venueId) {
+      if (!canPost || !venueId) {
         throw new Error("Verify presence at a venue before posting.");
       }
-  
-      const sampleFile = await createSampleJpegFile();
-  
-      try {
-        const intent = await createMediaUpload({
-          venueId,
-          mediaType: "image",
-          mimeType: "image/jpeg",
-          byteSize: sampleFile.size,
-          caption: caption.trim() || undefined,
-        });
-  
-        await uploadFile({
-          uploadUrl: intent.upload.url,
-          fileUri: sampleFile.uri,
-          headers: intent.upload.headers,
-        });
-  
-        return await completeMediaUpload(intent.upload_id);
-      } finally {
-        await FileSystem.deleteAsync(sampleFile.uri, {
-          idempotent: true,
-        }).catch(() => undefined);
+      setPhase("picking");
+      setUploadError(null);
+      const picked = await pickImageFromLibrary();
+      if (picked.status === "permission_denied") {
+        setPhase("permission_denied");
+        throw new Error("Photo library permission is required to post a Live Vibe.");
+      }
+      if (picked.status === "cancelled") {
+        setPhase("cancelled");
+        throw new Error("CANCELLED");
+      }
+      if (picked.status === "invalid") {
+        setPhase("failed_permanent");
+        throw new Error(picked.message);
+      }
+      setPhase("validating");
+      return runUpload(picked.asset);
+    },
+    onError: (error: Error) => {
+      if (error.message === "CANCELLED") {
+        setUploadError(null);
+        return;
+      }
+      setUploadError(error.message);
+      if (phase !== "permission_denied" && phase !== "cancelled") {
+        setPhase("failed_retryable");
       }
     },
-  
-    onSuccess: (status) => {
-      setUploadError(null);
-      setUploadStatus(status);
-      setCaption("");
+  });
+
+  const fixtureMutation = useMutation({
+    mutationFn: async () => {
+      if (!canPost || !venueId) {
+        throw new Error("Verify presence at a venue before posting.");
+      }
+      setPhase("validating");
+      const asset = await loadDevFixtureJpeg();
+      return runUpload(asset);
     },
-  
     onError: (error: Error) => {
       setUploadError(error.message);
+      setPhase("failed_retryable");
     },
   });
 
   const reportMutation = useMutation({
     mutationFn: (vibeId: string) => reportVibe(vibeId, "other"),
   });
+
+  const busy = galleryMutation.isPending || fixtureMutation.isPending;
+  const showRetry =
+    phase === "failed_retryable" || phase === "rejected" || phase === "failed_permanent";
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -199,7 +236,7 @@ export function ExperienceScreen() {
       {presenceQuery.data ? (
         <View style={styles.card}>
           <Text style={styles.meta}>Presence: {presenceQuery.data.state}</Text>
-          <Text style={styles.meta}>Venue: {presenceQuery.data.venue?.name ?? "none"}</Text>
+          <Text style={styles.meta}>Venue: {venueName ?? "none"}</Text>
         </View>
       ) : null}
 
@@ -207,8 +244,8 @@ export function ExperienceScreen() {
         <View style={styles.card}>
           <Text style={styles.section}>Post a Live Vibe</Text>
           <Text style={styles.help}>
-            Phase 3 local build posts a synthetic JPEG fixture. Library picker
-            wiring can replace this without changing the upload API.
+            Choose a photo from your library. The server validates size, type,
+            presence, and moderation before the vibe appears in the feed.
           </Text>
           <TextInput
             style={styles.input}
@@ -217,16 +254,40 @@ export function ExperienceScreen() {
             value={caption}
             onChangeText={setCaption}
             maxLength={300}
+            editable={!busy}
           />
+          {previewUri ? (
+            <Image source={{ uri: previewUri }} style={styles.localPreview} contentFit="cover" />
+          ) : null}
           <Pressable
-            style={[styles.button, uploadMutation.isPending && styles.buttonDisabled]}
-            disabled={uploadMutation.isPending}
-            onPress={() => uploadMutation.mutate()}
+            style={[styles.button, busy && styles.buttonDisabled]}
+            disabled={busy}
+            onPress={() => galleryMutation.mutate()}
           >
             <Text style={styles.buttonText}>
-              {uploadMutation.isPending ? "Uploading…" : "Upload sample photo"}
+              {busy && phase === "picking" ? "Opening library…" : "Choose from library"}
             </Text>
           </Pressable>
+          {showRetry ? (
+            <Pressable
+              style={[styles.buttonSecondary, busy && styles.buttonDisabled]}
+              disabled={busy}
+              onPress={() => galleryMutation.mutate()}
+            >
+              <Text style={styles.buttonSecondaryText}>Retry upload</Text>
+            </Pressable>
+          ) : null}
+          {__DEV__ ? (
+            <Pressable
+              style={[styles.buttonSecondary, busy && styles.buttonDisabled]}
+              disabled={busy}
+              onPress={() => fixtureMutation.mutate()}
+            >
+              <Text style={styles.buttonSecondaryText}>
+                Dev only: upload bundled fixture JPEG
+              </Text>
+            </Pressable>
+          ) : null}
         </View>
       ) : (
         <Text style={styles.help}>
@@ -235,10 +296,23 @@ export function ExperienceScreen() {
         </Text>
       )}
 
+      {phase !== "idle" ? (
+        <View style={styles.card}>
+          <Text style={styles.section}>Status</Text>
+          <Text style={styles.meta}>{phaseLabel(phase)}</Text>
+          {uploadProgress != null && phase === "uploading" ? (
+            <Text style={styles.meta}>
+              Upload progress: {Math.round(uploadProgress * 100)}%
+            </Text>
+          ) : null}
+          {busy ? <ActivityIndicator color="#9aa6bf" style={{ marginTop: 8 }} /> : null}
+        </View>
+      ) : null}
+
       {uploadError ? <Text style={styles.error}>{uploadError}</Text> : null}
       {uploadStatus ? (
         <View style={styles.card}>
-          <Text style={styles.section}>Upload status</Text>
+          <Text style={styles.section}>Server status</Text>
           <Text style={styles.meta}>lifecycle: {uploadStatus.lifecycle_status}</Text>
           <Text style={styles.meta}>moderation: {uploadStatus.moderation_status}</Text>
           <Text style={styles.meta}>
@@ -250,7 +324,7 @@ export function ExperienceScreen() {
         </View>
       ) : null}
 
-      <Text style={styles.section}>Venue feed</Text>
+      <Text style={styles.section}>Venue feed{venueName ? ` · ${venueName}` : ""}</Text>
       {!venueId ? (
         <Text style={styles.help}>No current venue — open a venue from Discover to browse.</Text>
       ) : null}
@@ -343,8 +417,17 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     alignItems: "center",
   },
+  buttonSecondary: {
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#334155",
+  },
   buttonDisabled: { opacity: 0.6 },
   buttonText: { color: "#f5f7fb", fontWeight: "600" },
+  buttonSecondaryText: { color: "#cbd5e1", fontWeight: "500" },
+  localPreview: { width: "100%", height: 160, borderRadius: 10, backgroundColor: "#0b1220" },
   vibe: {
     gap: 6,
     paddingBottom: 16,

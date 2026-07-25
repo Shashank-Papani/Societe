@@ -298,7 +298,12 @@ def test_noop_scanner_is_available_in_development_and_test() -> None:
 
 def test_configuring_the_noop_scanner_for_production_fails_validation() -> None:
     with pytest.raises(ValueError, match="MEDIA_MALWARE_SCANNER"):
-        Settings(app_env="production", auth_provider="cognito", media_malware_scanner="noop")
+        Settings(
+            app_env="production",
+            auth_provider="cognito",
+            media_malware_scanner="noop",
+            ff_location_simulator=False,
+        )
 
 
 def test_configuring_the_fake_moderator_for_production_fails_validation() -> None:
@@ -308,6 +313,7 @@ def test_configuring_the_fake_moderator_for_production_fails_validation() -> Non
             auth_provider="cognito",
             media_malware_scanner="clamav",
             media_moderation_provider="fake",
+            ff_location_simulator=False,
         )
 
 

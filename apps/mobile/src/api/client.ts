@@ -2,9 +2,13 @@ import Constants from "expo-constants";
 
 import { getLiveAccessToken, getUnauthorizedHandler } from "@/auth/AuthProvider";
 
-const extra = Constants.expoConfig?.extra as { apiBaseUrl?: string } | undefined;
+const extra = Constants.expoConfig?.extra as
+  | { apiBaseUrl?: string; realtimeUrl?: string }
+  | undefined;
 
 export const API_BASE_URL = extra?.apiBaseUrl ?? "http://localhost:8000";
+export const REALTIME_URL =
+  extra?.realtimeUrl ?? "ws://localhost:8000/v1/realtime/ws";
 
 export type ApiEnvelope<T> = {
   data: T;
@@ -15,12 +19,34 @@ export type ApiEnvelope<T> = {
 export class ApiError extends Error {
   status: number;
   code: string;
+  retryAfterSeconds: number | null;
 
-  constructor(status: number, code: string, message: string) {
+  constructor(
+    status: number,
+    code: string,
+    message: string,
+    retryAfterSeconds: number | null = null,
+  ) {
     super(message);
     this.status = status;
     this.code = code;
+    this.retryAfterSeconds = retryAfterSeconds;
   }
+}
+
+function parseRetryAfter(header: string | null): number | null {
+  if (!header) {
+    return null;
+  }
+  const asInt = Number.parseInt(header, 10);
+  if (Number.isFinite(asInt) && asInt >= 0) {
+    return asInt;
+  }
+  const asDate = Date.parse(header);
+  if (!Number.isNaN(asDate)) {
+    return Math.max(0, Math.ceil((asDate - Date.now()) / 1000));
+  }
+  return null;
 }
 
 export async function apiFetch<T>(
@@ -52,7 +78,12 @@ export async function apiFetch<T>(
       }
     }
     const message = body.error?.message ?? `Request failed (${response.status})`;
-    throw new ApiError(response.status, body.error?.code ?? "HTTP_ERROR", message);
+    throw new ApiError(
+      response.status,
+      body.error?.code ?? "HTTP_ERROR",
+      message,
+      parseRetryAfter(response.headers.get("Retry-After")),
+    );
   }
   return body;
 }

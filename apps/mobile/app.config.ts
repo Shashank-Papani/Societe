@@ -40,6 +40,13 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       },
     ],
     [
+      "expo-image-picker",
+      {
+        photosPermission: "Société needs photo library access to post Live Vibes.",
+        cameraPermission: "Société needs camera access to post Live Vibes.",
+      },
+    ],
+    [
       "expo-splash-screen",
       {
         backgroundColor: "#208AEF",
@@ -54,5 +61,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   extra: {
     apiBaseUrl: process.env.EXPO_PUBLIC_API_BASE_URL ?? "http://localhost:8000",
+    // API hosts WS /v1/realtime/ws on the same host/port as REST (default :8000).
+    realtimeUrl:
+      process.env.EXPO_PUBLIC_REALTIME_URL ?? "ws://localhost:8000/v1/realtime/ws",
   },
 });
