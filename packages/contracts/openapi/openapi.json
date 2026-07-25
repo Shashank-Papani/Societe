@@ -1,7 +1,23 @@
 {
   "components": {
     "schemas": {
+      "AccountDeactivationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "confirmation": {
+            "const": "DEACTIVATE",
+            "title": "Confirmation",
+            "type": "string"
+          }
+        },
+        "required": [
+          "confirmation"
+        ],
+        "title": "AccountDeactivationRequest",
+        "type": "object"
+      },
       "AccountDeletionRequest": {
+        "additionalProperties": false,
         "properties": {
           "confirmation": {
             "const": "DELETE",
@@ -13,6 +29,58 @@
           "confirmation"
         ],
         "title": "AccountDeletionRequest",
+        "type": "object"
+      },
+      "AccountReactivationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "app_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "App Version"
+          },
+          "confirmation": {
+            "const": "REACTIVATE",
+            "title": "Confirmation",
+            "type": "string"
+          },
+          "installation_id": {
+            "format": "uuid",
+            "title": "Installation Id",
+            "type": "string"
+          },
+          "os_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Os Version"
+          },
+          "platform": {
+            "enum": [
+              "ios",
+              "android"
+            ],
+            "title": "Platform",
+            "type": "string"
+          }
+        },
+        "required": [
+          "confirmation",
+          "platform",
+          "installation_id"
+        ],
+        "title": "AccountReactivationRequest",
         "type": "object"
       },
       "BlockUserRequest": {
@@ -251,6 +319,7 @@
         "type": "object"
       },
       "DeviceCreate": {
+        "additionalProperties": false,
         "properties": {
           "app_version": {
             "anyOf": [
@@ -476,6 +545,24 @@
         "title": "LocalDevTokenRequest",
         "type": "object"
       },
+      "LogoutBody": {
+        "additionalProperties": false,
+        "properties": {
+          "refresh_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Refresh Token"
+          }
+        },
+        "title": "LogoutBody",
+        "type": "object"
+      },
       "MarkReadRequest": {
         "additionalProperties": false,
         "properties": {
@@ -493,6 +580,183 @@
           }
         },
         "title": "MarkReadRequest",
+        "type": "object"
+      },
+      "OnboardingAgeBody": {
+        "additionalProperties": false,
+        "properties": {
+          "date_of_birth": {
+            "format": "date",
+            "title": "Date Of Birth",
+            "type": "string"
+          }
+        },
+        "required": [
+          "date_of_birth"
+        ],
+        "title": "OnboardingAgeBody",
+        "type": "object"
+      },
+      "OnboardingPoliciesBody": {
+        "additionalProperties": false,
+        "properties": {
+          "privacy_policy_version": {
+            "title": "Privacy Policy Version",
+            "type": "string"
+          },
+          "tos_version": {
+            "title": "Tos Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tos_version",
+          "privacy_policy_version"
+        ],
+        "title": "OnboardingPoliciesBody",
+        "type": "object"
+      },
+      "OnboardingPrivacyBody": {
+        "additionalProperties": false,
+        "properties": {
+          "allow_calling_cards": {
+            "title": "Allow Calling Cards",
+            "type": "boolean"
+          },
+          "allow_messages_from_connections": {
+            "title": "Allow Messages From Connections",
+            "type": "boolean"
+          },
+          "discoverable_in_venue": {
+            "title": "Discoverable In Venue",
+            "type": "boolean"
+          },
+          "ghost_mode": {
+            "default": false,
+            "title": "Ghost Mode",
+            "type": "boolean"
+          },
+          "notify_calling_cards": {
+            "default": true,
+            "title": "Notify Calling Cards",
+            "type": "boolean"
+          },
+          "notify_messages": {
+            "default": true,
+            "title": "Notify Messages",
+            "type": "boolean"
+          },
+          "show_social_links_after_accept": {
+            "title": "Show Social Links After Accept",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "discoverable_in_venue",
+          "allow_calling_cards",
+          "allow_messages_from_connections",
+          "show_social_links_after_accept"
+        ],
+        "title": "OnboardingPrivacyBody",
+        "type": "object"
+      },
+      "OnboardingProfileBody": {
+        "additionalProperties": false,
+        "properties": {
+          "display_name": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Display Name",
+            "type": "string"
+          },
+          "handle": {
+            "maxLength": 32,
+            "minLength": 3,
+            "title": "Handle",
+            "type": "string"
+          }
+        },
+        "required": [
+          "handle",
+          "display_name"
+        ],
+        "title": "OnboardingProfileBody",
+        "type": "object"
+      },
+      "OtpRequestBody": {
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "maxLength": 320,
+            "minLength": 3,
+            "title": "Email",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email"
+        ],
+        "title": "OtpRequestBody",
+        "type": "object"
+      },
+      "OtpVerifyBody": {
+        "additionalProperties": false,
+        "properties": {
+          "app_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "App Version"
+          },
+          "code": {
+            "maxLength": 12,
+            "minLength": 4,
+            "title": "Code",
+            "type": "string"
+          },
+          "email": {
+            "maxLength": 320,
+            "minLength": 3,
+            "title": "Email",
+            "type": "string"
+          },
+          "installation_id": {
+            "format": "uuid",
+            "title": "Installation Id",
+            "type": "string"
+          },
+          "os_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Os Version"
+          },
+          "platform": {
+            "enum": [
+              "ios",
+              "android"
+            ],
+            "title": "Platform",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "code",
+          "platform",
+          "installation_id"
+        ],
+        "title": "OtpVerifyBody",
         "type": "object"
       },
       "PlatformSignals": {
@@ -524,6 +788,7 @@
         "type": "object"
       },
       "PrivacyPatch": {
+        "additionalProperties": false,
         "properties": {
           "allow_calling_cards": {
             "anyOf": [
@@ -535,6 +800,17 @@
               }
             ],
             "title": "Allow Calling Cards"
+          },
+          "allow_messages_from_connections": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allow Messages From Connections"
           },
           "analytics_opt_out": {
             "anyOf": [
@@ -569,6 +845,28 @@
             ],
             "title": "Ghost Mode"
           },
+          "notify_calling_cards": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notify Calling Cards"
+          },
+          "notify_messages": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notify Messages"
+          },
           "show_social_links_after_accept": {
             "anyOf": [
               {
@@ -585,25 +883,8 @@
         "type": "object"
       },
       "ProfilePatch": {
+        "additionalProperties": false,
         "properties": {
-          "age_band": {
-            "anyOf": [
-              {
-                "enum": [
-                  "18-20",
-                  "21-24",
-                  "25-29",
-                  "30-34",
-                  "35+"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Age Band"
-          },
           "bio": {
             "anyOf": [
               {
@@ -629,21 +910,63 @@
             ],
             "title": "Display Name"
           },
-          "handle": {
+          "interests": {
             "anyOf": [
               {
-                "maxLength": 32,
-                "minLength": 3,
-                "type": "string"
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Handle"
+            "title": "Interests"
           }
         },
         "title": "ProfilePatch",
+        "type": "object"
+      },
+      "ProfilePhotoUploadBody": {
+        "additionalProperties": false,
+        "properties": {
+          "byte_size": {
+            "exclusiveMinimum": 0.0,
+            "title": "Byte Size",
+            "type": "integer"
+          },
+          "device_id": {
+            "format": "uuid",
+            "title": "Device Id",
+            "type": "string"
+          },
+          "mime_type": {
+            "title": "Mime Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "device_id",
+          "mime_type",
+          "byte_size"
+        ],
+        "title": "ProfilePhotoUploadBody",
+        "type": "object"
+      },
+      "RefreshBody": {
+        "additionalProperties": false,
+        "properties": {
+          "refresh_token": {
+            "minLength": 20,
+            "title": "Refresh Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "refresh_token"
+        ],
+        "title": "RefreshBody",
         "type": "object"
       },
       "RespondCallingCardRequest": {
@@ -984,6 +1307,206 @@
         "summary": "Issue Local Dev Token",
         "tags": [
           "identity"
+        ]
+      }
+    },
+    "/v1/auth/logout": {
+      "post": {
+        "operationId": "logout_v1_auth_logout_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LogoutBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Logout V1 Auth Logout Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Logout",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/v1/auth/logout-all": {
+      "post": {
+        "operationId": "logout_all_v1_auth_logout_all_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Logout All V1 Auth Logout All Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Logout All",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/v1/auth/otp/request": {
+      "post": {
+        "operationId": "request_otp_v1_auth_otp_request_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OtpRequestBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Request Otp V1 Auth Otp Request Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Request Otp",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/v1/auth/otp/verify": {
+      "post": {
+        "operationId": "verify_otp_v1_auth_otp_verify_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OtpVerifyBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Verify Otp V1 Auth Otp Verify Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Verify Otp",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/v1/auth/refresh": {
+      "post": {
+        "operationId": "refresh_tokens_v1_auth_refresh_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Refresh Tokens V1 Auth Refresh Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Refresh Tokens",
+        "tags": [
+          "auth"
         ]
       }
     },
@@ -2310,9 +2833,56 @@
         ]
       }
     },
+    "/v1/me/account-deactivation": {
+      "post": {
+        "operationId": "deactivate_account_v1_me_account_deactivation_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountDeactivationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Deactivate Account V1 Me Account Deactivation Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Deactivate Account",
+        "tags": [
+          "identity"
+        ]
+      }
+    },
     "/v1/me/account-deletion": {
       "post": {
-        "description": "Soft-deletion request. Idempotency replay runs before account-status denial.",
         "operationId": "request_account_deletion_v1_me_account_deletion_post",
         "parameters": [
           {
@@ -2377,7 +2947,109 @@
         ]
       }
     },
+    "/v1/me/account-reactivation": {
+      "post": {
+        "operationId": "reactivate_account_v1_me_account_reactivation_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountReactivationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Reactivate Account V1 Me Account Reactivation Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Reactivate Account",
+        "tags": [
+          "identity"
+        ]
+      }
+    },
+    "/v1/me/blocked-users": {
+      "get": {
+        "operationId": "list_blocked_users_v1_me_blocked_users_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Blocked Users V1 Me Blocked Users Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Blocked Users",
+        "tags": [
+          "social"
+        ]
+      }
+    },
     "/v1/me/devices": {
+      "get": {
+        "operationId": "list_devices_v1_me_devices_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Devices V1 Me Devices Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Devices",
+        "tags": [
+          "identity"
+        ]
+      },
       "post": {
         "operationId": "register_device_v1_me_devices_post",
         "parameters": [
@@ -2509,7 +3181,253 @@
         ]
       }
     },
+    "/v1/me/onboarding": {
+      "get": {
+        "operationId": "get_onboarding_v1_me_onboarding_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Onboarding V1 Me Onboarding Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Onboarding",
+        "tags": [
+          "identity"
+        ]
+      }
+    },
+    "/v1/me/onboarding/age": {
+      "post": {
+        "operationId": "onboarding_age_v1_me_onboarding_age_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OnboardingAgeBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Onboarding Age V1 Me Onboarding Age Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Onboarding Age",
+        "tags": [
+          "identity"
+        ]
+      }
+    },
+    "/v1/me/onboarding/policies": {
+      "post": {
+        "operationId": "onboarding_policies_v1_me_onboarding_policies_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OnboardingPoliciesBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Onboarding Policies V1 Me Onboarding Policies Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Onboarding Policies",
+        "tags": [
+          "identity"
+        ]
+      }
+    },
+    "/v1/me/onboarding/privacy": {
+      "post": {
+        "operationId": "onboarding_privacy_v1_me_onboarding_privacy_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OnboardingPrivacyBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Onboarding Privacy V1 Me Onboarding Privacy Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Onboarding Privacy",
+        "tags": [
+          "identity"
+        ]
+      }
+    },
+    "/v1/me/onboarding/profile": {
+      "post": {
+        "operationId": "onboarding_profile_v1_me_onboarding_profile_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OnboardingProfileBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Onboarding Profile V1 Me Onboarding Profile Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Onboarding Profile",
+        "tags": [
+          "identity"
+        ]
+      }
+    },
     "/v1/me/privacy": {
+      "get": {
+        "operationId": "get_privacy_v1_me_privacy_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Privacy V1 Me Privacy Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Privacy",
+        "tags": [
+          "identity"
+        ]
+      },
       "patch": {
         "operationId": "patch_privacy_v1_me_privacy_patch",
         "parameters": [
@@ -2570,6 +3488,219 @@
           }
         ],
         "summary": "Patch Privacy",
+        "tags": [
+          "identity"
+        ]
+      }
+    },
+    "/v1/me/profile": {
+      "patch": {
+        "operationId": "patch_me_v1_me_profile_patch",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfilePatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Patch Me V1 Me Profile Patch",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Patch Me",
+        "tags": [
+          "identity"
+        ]
+      }
+    },
+    "/v1/me/profile-photo/uploads": {
+      "post": {
+        "operationId": "create_profile_photo_upload_v1_me_profile_photo_uploads_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfilePhotoUploadBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create Profile Photo Upload V1 Me Profile Photo Uploads Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Profile Photo Upload",
+        "tags": [
+          "identity"
+        ]
+      }
+    },
+    "/v1/me/profile-photo/uploads/{upload_id}/complete": {
+      "post": {
+        "operationId": "complete_profile_photo_upload_v1_me_profile_photo_uploads__upload_id__complete_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "upload_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Upload Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Complete Profile Photo Upload V1 Me Profile Photo Uploads  Upload Id  Complete Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Complete Profile Photo Upload",
+        "tags": [
+          "identity"
+        ]
+      }
+    },
+    "/v1/me/username-availability": {
+      "get": {
+        "operationId": "username_availability_v1_me_username_availability_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "handle",
+            "required": true,
+            "schema": {
+              "title": "Handle",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Username Availability V1 Me Username Availability Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Username Availability",
         "tags": [
           "identity"
         ]

@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Text, UniqueConstraint, func, text
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Text, UniqueConstraint, func, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -21,9 +21,19 @@ class User(Base):
     handle: Mapped[str] = mapped_column(Text, nullable=False)
     display_name: Mapped[str] = mapped_column(Text, nullable=False)
     bio: Mapped[str | None] = mapped_column(Text)
+    date_of_birth: Mapped[date | None] = mapped_column(Date)
     age_verified: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     age_band: Mapped[str | None] = mapped_column(Text)
     account_status: Mapped[str] = mapped_column(Text, nullable=False, server_default="active")
+    onboarding_state: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default="authentication_verified"
+    )
+    onboarding_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    deactivated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    profile_photo_media_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("app.profile_media_assets.id", ondelete="SET NULL")
+    )
+    handle_locked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
@@ -50,12 +60,19 @@ class UserPrivacySettings(Base):
         Boolean, nullable=False, server_default="false"
     )
     allow_calling_cards: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, server_default="true"
+        Boolean, nullable=False, server_default="false"
+    )
+    allow_messages_from_connections: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
     )
     show_social_links_after_accept: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="false"
     )
     analytics_opt_out: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    notify_calling_cards: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="true"
+    )
+    notify_messages: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

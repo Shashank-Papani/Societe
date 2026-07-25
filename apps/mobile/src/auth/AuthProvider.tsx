@@ -1,6 +1,6 @@
 /**
  * Shared auth session for protected queries.
- * Token is restored from SecureStore before protected queries enable.
+ * Tokens are restored from SecureStore; 401 triggers one refresh attempt.
  */
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -13,17 +13,25 @@ import {
   type ReactNode,
 } from "react";
 
+import { API_BASE_URL, type ApiEnvelope } from "@/api/client";
 import { clearActiveAuthSubject } from "@/auth/deviceStore";
-import { clearAccessToken, getAccessToken, saveAccessToken } from "@/auth/tokenStore";
+import {
+  clearSessionTokens,
+  getAccessToken,
+  getRefreshToken,
+  saveAccessToken,
+  saveRefreshToken,
+} from "@/auth/tokenStore";
 
 export type AuthStatus = "initializing" | "authenticated" | "unauthenticated";
 
 type AuthContextValue = {
   status: AuthStatus;
   accessToken: string | null;
-  setSession: (token: string) => Promise<void>;
+  setSession: (accessToken: string, refreshToken?: string | null) => Promise<void>;
   clearSession: () => Promise<void>;
   handleUnauthorized: () => Promise<void>;
+  refreshSession: () => Promise<string | null>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -39,6 +47,8 @@ const PROTECTED_QUERY_PREFIXES = [
 
 let liveAccessToken: string | null = null;
 let unauthorizedHandler: (() => Promise<void>) | null = null;
+let refreshHandler: (() => Promise<string | null>) | null = null;
+let refreshInFlight: Promise<string | null> | null = null;
 
 export function getLiveAccessToken(): string | null {
   return liveAccessToken;
@@ -46,6 +56,10 @@ export function getLiveAccessToken(): string | null {
 
 export function getUnauthorizedHandler(): (() => Promise<void>) | null {
   return unauthorizedHandler;
+}
+
+export function getRefreshHandler(): (() => Promise<string | null>) | null {
+  return refreshHandler;
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -64,20 +78,65 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [queryClient]);
 
-  const handleUnauthorized = useCallback(async () => {
-    await clearAccessToken();
+  const clearSession = useCallback(async () => {
+    await clearSessionTokens();
     await clearActiveAuthSubject();
     setAccessToken(null);
     setStatus("unauthenticated");
     clearProtectedQueries();
   }, [clearProtectedQueries, setAccessToken]);
 
+  const handleUnauthorized = useCallback(async () => {
+    await clearSession();
+  }, [clearSession]);
+
+  const refreshSession = useCallback(async () => {
+    if (refreshInFlight) {
+      return refreshInFlight;
+    }
+    refreshInFlight = (async () => {
+      const refreshToken = await getRefreshToken();
+      if (!refreshToken) {
+        await clearSession();
+        return null;
+      }
+      try {
+        const response = await fetch(`${API_BASE_URL}/v1/auth/refresh`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ refresh_token: refreshToken }),
+        });
+        const body = (await response.json()) as ApiEnvelope<{
+          access_token: string;
+          refresh_token: string;
+        }>;
+        if (!response.ok || !body.data?.access_token) {
+          await clearSession();
+          return null;
+        }
+        await saveAccessToken(body.data.access_token);
+        await saveRefreshToken(body.data.refresh_token);
+        setAccessToken(body.data.access_token);
+        setStatus("authenticated");
+        return body.data.access_token;
+      } catch {
+        await clearSession();
+        return null;
+      } finally {
+        refreshInFlight = null;
+      }
+    })();
+    return refreshInFlight;
+  }, [clearSession, setAccessToken]);
+
   useEffect(() => {
     unauthorizedHandler = handleUnauthorized;
+    refreshHandler = refreshSession;
     return () => {
       unauthorizedHandler = null;
+      refreshHandler = null;
     };
-  }, [handleUnauthorized]);
+  }, [handleUnauthorized, refreshSession]);
 
   useEffect(() => {
     let cancelled = false;
@@ -105,8 +164,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [setAccessToken]);
 
   const setSession = useCallback(
-    async (token: string) => {
+    async (token: string, refreshToken?: string | null) => {
       await saveAccessToken(token);
+      if (refreshToken) {
+        await saveRefreshToken(refreshToken);
+      }
       setAccessToken(token);
       setStatus("authenticated");
       await Promise.all([
@@ -121,14 +183,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [queryClient, setAccessToken],
   );
 
-  const clearSession = useCallback(async () => {
-    await clearAccessToken();
-    await clearActiveAuthSubject();
-    setAccessToken(null);
-    setStatus("unauthenticated");
-    clearProtectedQueries();
-  }, [clearProtectedQueries, setAccessToken]);
-
   const value = useMemo(
     () => ({
       status,
@@ -136,8 +190,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession,
       clearSession,
       handleUnauthorized,
+      refreshSession,
     }),
-    [status, accessToken, setSession, clearSession, handleUnauthorized],
+    [status, accessToken, setSession, clearSession, handleUnauthorized, refreshSession],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

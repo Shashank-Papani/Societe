@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import Depends, Header
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -26,6 +26,21 @@ get_db = get_db_session
 class CurrentUserContext:
     user: User
     auth_subject: str
+    claims: dict[str, Any]
+
+
+async def _load_user_context(
+    credentials: HTTPAuthorizationCredentials | None,
+    settings: Settings,
+    session: AsyncSession,
+) -> CurrentUserContext:
+    if credentials is None or credentials.scheme.lower() != "bearer":
+        raise AppError("UNAUTHORIZED", "Bearer token required.", status_code=401)
+    provider = get_identity_provider(settings)
+    claims = await provider.verify_token(credentials.credentials)
+    service = IdentityService(session, settings)
+    user = await service.resolve_or_provision(claims.subject)
+    return CurrentUserContext(user=user, auth_subject=claims.subject, claims=dict(claims.raw))
 
 
 async def get_current_user(
@@ -33,14 +48,9 @@ async def get_current_user(
     settings: Annotated[Settings, Depends(get_settings)],
     session: Annotated[AsyncSession, Depends(get_db)],
 ) -> CurrentUserContext:
-    if credentials is None or credentials.scheme.lower() != "bearer":
-        raise AppError("UNAUTHORIZED", "Bearer token required.", status_code=401)
-    provider = get_identity_provider(settings)
-    claims = await provider.verify_token(credentials.credentials)
-    service = IdentityService(session)
-    user = await service.resolve_or_provision(claims.subject)
-    service.assert_active(user)
-    return CurrentUserContext(user=user, auth_subject=claims.subject)
+    ctx = await _load_user_context(credentials, settings, session)
+    IdentityService(session, settings).assert_active(ctx.user)
+    return ctx
 
 
 async def get_current_user_allow_inactive(
@@ -48,14 +58,29 @@ async def get_current_user_allow_inactive(
     settings: Annotated[Settings, Depends(get_settings)],
     session: Annotated[AsyncSession, Depends(get_db)],
 ) -> CurrentUserContext:
-    """Load user without denying deletion_requested (for deletion idempotency replay)."""
-    if credentials is None or credentials.scheme.lower() != "bearer":
-        raise AppError("UNAUTHORIZED", "Bearer token required.", status_code=401)
-    provider = get_identity_provider(settings)
-    claims = await provider.verify_token(credentials.credentials)
-    service = IdentityService(session)
-    user = await service.resolve_or_provision(claims.subject)
-    return CurrentUserContext(user=user, auth_subject=claims.subject)
+    """Load user without denying deletion_requested / deactivated."""
+    return await _load_user_context(credentials, settings, session)
+
+
+async def get_current_user_for_reactivation(
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    session: Annotated[AsyncSession, Depends(get_db)],
+) -> CurrentUserContext:
+    ctx = await _load_user_context(credentials, settings, session)
+    if ctx.user.account_status != "deactivated":
+        raise AppError(
+            "ACCOUNT_NOT_DEACTIVATED",
+            "This account is not awaiting reactivation.",
+            status_code=409,
+        )
+    if not ctx.claims.get("reactivation"):
+        raise AppError(
+            "REACTIVATION_REQUIRED",
+            "Verify email OTP again to reactivate this account.",
+            status_code=403,
+        )
+    return ctx
 
 
 async def get_idempotency_service(

@@ -11,19 +11,18 @@ from app.core.config import Settings, get_settings
 bearer_scheme = HTTPBearer(auto_error=False)
 
 
-def create_access_token(
+def mint_access_token(
     *,
     subject: str,
     handle: str,
     settings: Settings,
     extra_claims: dict[str, Any] | None = None,
 ) -> str:
+    """Mint a Societe access JWT for OTP or session refresh (any APP_ENV)."""
     from datetime import UTC, datetime, timedelta
 
     if settings.auth_provider != "local":
-        raise RuntimeError("create_access_token is only available for AUTH_PROVIDER=local")
-    if settings.app_env not in {"development", "test"}:
-        raise RuntimeError("Local token minting is only allowed in development/test")
+        raise RuntimeError("mint_access_token is only available for AUTH_PROVIDER=local")
 
     now = datetime.now(UTC)
     payload: dict[str, Any] = {
@@ -42,6 +41,23 @@ def create_access_token(
         algorithm=settings.jwt_algorithm,
     )
     return cast(str, token)
+
+
+def create_access_token(
+    *,
+    subject: str,
+    handle: str,
+    settings: Settings,
+    extra_claims: dict[str, Any] | None = None,
+) -> str:
+    """Dev-persona / local-token minting. Hard-gated to development/test."""
+    if settings.auth_provider != "local":
+        raise RuntimeError("create_access_token is only available for AUTH_PROVIDER=local")
+    if settings.app_env not in {"development", "test"}:
+        raise RuntimeError("Local persona token minting is only allowed in development/test")
+    return mint_access_token(
+        subject=subject, handle=handle, settings=settings, extra_claims=extra_claims
+    )
 
 
 def decode_access_token(token: str, settings: Settings) -> dict[str, Any]:

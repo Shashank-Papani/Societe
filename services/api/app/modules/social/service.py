@@ -430,6 +430,8 @@ class SocialService:
             other = result.scalar_one_or_none()
             if other is None or other.account_status != "active" or other.deleted_at is not None:
                 continue
+            if other.onboarding_state != "completed":
+                continue
             privacy: UserPrivacySettings | None = other.privacy
             if (
                 privacy is None
@@ -449,6 +451,25 @@ class SocialService:
                 break
 
         return DiscoverableUsersResponse(venue_id=venue_id, items=items)
+
+    async def list_blocked_users(self, *, user: User) -> dict[str, object]:
+        result = await self._session.execute(
+            select(UserBlock, User)
+            .join(User, User.id == UserBlock.blocked_user_id)
+            .where(UserBlock.blocker_user_id == user.id)
+            .order_by(UserBlock.created_at.desc())
+        )
+        items: list[dict[str, object]] = []
+        for block, blocked in result.all():
+            items.append(
+                {
+                    "user_id": str(blocked.id),
+                    "handle": blocked.handle,
+                    "display_name": blocked.display_name,
+                    "blocked_at": block.created_at.isoformat(),
+                }
+            )
+        return {"blocked_users": items}
 
     async def block_user(
         self,

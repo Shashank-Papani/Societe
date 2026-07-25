@@ -1,0 +1,9 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Ignore untracked local environment and generated iOS files"
+paths = [
+  '''^\.env$''',
+  '''^apps/mobile/ios/''',
+]

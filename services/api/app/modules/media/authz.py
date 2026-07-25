@@ -199,6 +199,18 @@ class MediaPostingAuthorizer:
     ) -> UploadAuthorization:
         require_media_posting_enabled(self._settings)
         validate_declared_media(request, self._settings)
+        if user.onboarding_state == "age_ineligible":
+            raise AppError(
+                "AGE_INELIGIBLE",
+                "This account does not meet the minimum age requirement.",
+                status_code=403,
+            )
+        if user.onboarding_state != "completed":
+            raise AppError(
+                "ONBOARDING_INCOMPLETE",
+                "Finish onboarding before posting Live Vibes.",
+                status_code=403,
+            )
 
         device = await self._presence.load_owned_device(user, request.device_id)
         decision = await self._presence.can_post_live_vibe(user, request.venue_id, device, now=now)

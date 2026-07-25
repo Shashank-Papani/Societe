@@ -21,6 +21,7 @@ from app.core.logging import configure_logging, get_logger
 from app.core.middleware import RequestContextMiddleware
 from app.core.telemetry import setup_telemetry
 from app.db.session import dispose_resources
+from app.modules.identity.auth_router import router as auth_router
 from app.modules.identity.router import router as identity_router
 from app.modules.media.router import router as media_router
 from app.modules.messaging.router import router as messaging_router
@@ -72,6 +73,7 @@ def create_app() -> FastAPI:
     application.add_exception_handler(RequestValidationError, cast(Any, validation_error_handler))
 
     application.include_router(health_router)
+    application.include_router(auth_router)
     application.include_router(identity_router)
     application.include_router(venues_router)
     application.include_router(presence_router)

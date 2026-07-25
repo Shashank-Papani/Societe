@@ -26,6 +26,7 @@ def _test_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     monkeypatch.setenv("LOCAL_DEV_HANDLE", "localdev")
     monkeypatch.setenv("JWT_SECRET", "test-secret-not-for-production-0123456789abcdef")
     monkeypatch.setenv("CURSOR_HMAC_SECRET", "test-cursor-hmac-secret-0123456789abcdef01234567")
+    monkeypatch.setenv("EMAIL_PROVIDER", "memory")
     monkeypatch.setenv("OTEL_ENABLED", "false")
     # Phase 3 media posting is exercised by the suite, so the flag is on and the
     # development-only scanner/moderator are selected explicitly rather than

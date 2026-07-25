@@ -19,6 +19,7 @@
     "expo-font": "~57.0.1",
     "expo-glass-effect": "~57.0.1",
     "expo-image": "~57.0.1",
+    "expo-image-manipulator": "~57.0.6",
     "expo-image-picker": "57.0.6",
     "expo-linking": "~57.0.4",
     "expo-location": "^57.0.6",
@@ -55,6 +56,6 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test src/features/experience/mediaValidation.test.ts src/features/connect/queueHelpers.test.ts src/features/messages/messageHelpers.test.ts src/auth/deviceKeys.test.ts"
+    "test": "node --experimental-strip-types --test src/features/experience/mediaValidation.test.ts src/features/connect/queueHelpers.test.ts src/features/messages/messageHelpers.test.ts src/auth/deviceKeys.test.ts src/auth/emailValidation.test.ts src/auth/deviceKeyMigration.test.ts src/features/profile/profilePhotoUi.test.ts src/features/profile/profilePhotoCropMath.test.ts"
   }
 }

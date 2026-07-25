@@ -158,12 +158,16 @@ async def build_world(
         handle=f"author_{suffix}",
         display_name="Test Author",
         account_status="active",
+        onboarding_state="completed",
+        age_verified=True,
     )
     viewer = User(
         auth_subject=f"test-viewer-{suffix}",
         handle=f"viewer_{suffix}",
         display_name="Test Viewer",
         account_status="active",
+        onboarding_state="completed",
+        age_verified=True,
     )
     session.add_all([author, viewer])
     await session.flush()

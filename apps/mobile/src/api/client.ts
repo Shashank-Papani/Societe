@@ -1,6 +1,10 @@
 import Constants from "expo-constants";
 
-import { getLiveAccessToken, getUnauthorizedHandler } from "@/auth/AuthProvider";
+import {
+  getLiveAccessToken,
+  getRefreshHandler,
+  getUnauthorizedHandler,
+} from "@/auth/AuthProvider";
 
 const extra = Constants.expoConfig?.extra as
   | { apiBaseUrl?: string; realtimeUrl?: string }
@@ -52,7 +56,7 @@ function parseRetryAfter(header: string | null): number | null {
 export async function apiFetch<T>(
   path: string,
   init: RequestInit = {},
-  options: { auth?: boolean } = { auth: true },
+  options: { auth?: boolean; _retried?: boolean } = { auth: true },
 ): Promise<ApiEnvelope<T>> {
   const headers = new Headers(init.headers);
   if (!headers.has("Content-Type") && init.body) {
@@ -71,7 +75,27 @@ export async function apiFetch<T>(
   });
   const body = (await response.json()) as ApiEnvelope<T>;
   if (!response.ok) {
-    if (response.status === 401) {
+    if (response.status === 401 && options.auth !== false && !options._retried) {
+      const refresh = getRefreshHandler();
+      if (refresh) {
+        const next = await refresh();
+        if (next) {
+          const retryHeaders = new Headers(init.headers);
+          if (!retryHeaders.has("Content-Type") && init.body) {
+            retryHeaders.set("Content-Type", "application/json");
+          }
+          retryHeaders.set("Authorization", `Bearer ${next}`);
+          return apiFetch<T>(path, { ...init, headers: retryHeaders }, {
+            ...options,
+            _retried: true,
+          });
+        }
+      }
+      const handler = getUnauthorizedHandler();
+      if (handler) {
+        await handler();
+      }
+    } else if (response.status === 401) {
       const handler = getUnauthorizedHandler();
       if (handler) {
         await handler();

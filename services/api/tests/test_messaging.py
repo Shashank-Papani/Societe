@@ -275,6 +275,7 @@ async def test_non_participant_cannot_read_messages(world: CallingCardWorld) -> 
         display_name="Stranger",
         account_status="active",
         age_verified=True,
+        onboarding_state="completed",
     )
     world.session.add(stranger)
     await world.session.commit()

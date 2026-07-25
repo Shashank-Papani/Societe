@@ -346,6 +346,20 @@ class CallingCardAuthorizer:
                 status_code=403,
                 details={"reason": "account_not_active", "role": role},
             )
+        if user.onboarding_state == "age_ineligible":
+            raise AppError(
+                "AGE_INELIGIBLE",
+                f"The {role} account does not meet the minimum age requirement.",
+                status_code=403,
+                details={"reason": "age_ineligible", "role": role},
+            )
+        if user.onboarding_state != "completed":
+            raise AppError(
+                "ONBOARDING_INCOMPLETE",
+                f"The {role} must finish onboarding before using Calling Cards.",
+                status_code=403,
+                details={"reason": "onboarding_incomplete", "role": role},
+            )
 
     @staticmethod
     def _assert_privacy_allows_cards(user: User, *, role: str) -> None:

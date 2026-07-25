@@ -21,3 +21,9 @@ ADRs document durable technical decisions for Société.
 | 0015 | Conversation lifecycle and dynamic messaging authz |
 | 0016 | Message idempotency via client_message_id |
 | 0017 | Read state and unread strategy |
+| 0018 | Passwordless email OTP and email provider abstraction |
+| 0019 | Refresh session rotation and concurrency |
+| 0020 | Server-authoritative onboarding state machine |
+| 0021 | Age eligibility and date-of-birth privacy |
+| 0022 | Account deactivation, deletion, and retention |
+| 0023 | Profile media pipeline reuse |

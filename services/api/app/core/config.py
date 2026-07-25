@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     auth_provider: Literal["local", "cognito"] = "local"
     jwt_secret: SecretStr = Field(default=SecretStr("dev-only-insecure-secret-change-me"))
     jwt_algorithm: str = "HS256"
+    # Keep 60 until mobile refresh + single-retry-on-401 are shipped and tested;
+    # 15 minutes is the approved post-refresh default (ADR / Phase 6 plan).
     jwt_access_token_minutes: int = 60
     local_dev_subject: str = "local-dev-user"
     local_dev_handle: str = "localdev"
@@ -35,6 +37,25 @@ class Settings(BaseSettings):
     cognito_app_client_id: str = ""
     cognito_accept_id_tokens: bool = False
     cognito_allowed_algorithms: list[str] = Field(default_factory=lambda: ["RS256"])
+
+    # Phase 6 email OTP (ADR 0018). Mailpit is development/test only.
+    email_provider: Literal["mailpit", "ses", "memory"] = "mailpit"
+    mailpit_smtp_host: str = "localhost"
+    mailpit_smtp_port: int = 1025
+    mailpit_ui_url: str = "http://localhost:8025"
+    ses_region: str = "us-west-2"
+    ses_from_email: str = ""
+    otp_ttl_seconds: int = 600
+    otp_resend_cooldown_seconds: int = 60
+    otp_max_attempts: int = 5
+    otp_rate_limit_per_email_per_hour: int = 10
+    otp_rate_limit_per_ip_per_hour: int = 30
+    refresh_token_days: int = 30
+    refresh_rotation_grace_seconds: int = 30
+    minimum_age_years: int = 18
+    tos_version: str = "2026-07-01"
+    privacy_policy_version: str = "2026-07-01"
+    profile_photo_max_bytes: int = 5_000_000
 
     cursor_hmac_secret: SecretStr = Field(
         default=SecretStr("dev-only-cursor-hmac-change-me-0123456789abcdef")
@@ -308,13 +329,12 @@ class Settings(BaseSettings):
         return self
 
     @model_validator(mode="after")
-    def reject_local_auth_outside_development(self) -> Settings:
-        if self.auth_provider == "local" and self.app_env in {"staging", "production"}:
-            msg = (
-                "AUTH_PROVIDER=local is forbidden when APP_ENV is "
-                f"{self.app_env!r}. Use a non-local auth provider."
-            )
-            raise ValueError(msg)
+    def validate_auth_and_email_settings(self) -> Settings:
+        """Societe-minted JWTs (AUTH_PROVIDER=local) power OTP in all envs.
+
+        Dev persona minting remains separately gated to development/test.
+        Email provider fails closed outside development/test (ADR 0018).
+        """
         if self.auth_provider == "local" and self.jwt_secret.get_secret_value() in {
             "",
             "replace-me-with-openssl-rand-hex-32",
@@ -327,6 +347,36 @@ class Settings(BaseSettings):
         }:
             msg = "CURSOR_HMAC_SECRET must be set."
             raise ValueError(msg)
+        if self.app_env in {"staging", "production"}:
+            if self.email_provider in {"mailpit", "memory"}:
+                msg = (
+                    f"EMAIL_PROVIDER={self.email_provider!r} is forbidden when "
+                    f"APP_ENV is {self.app_env!r}. Configure EMAIL_PROVIDER=ses."
+                )
+                raise ValueError(msg)
+            if self.email_provider == "ses" and not self.ses_from_email:
+                msg = "SES_FROM_EMAIL is required when EMAIL_PROVIDER=ses."
+                raise ValueError(msg)
+        if self.email_provider == "mailpit" and self.app_env not in {"development", "test"}:
+            msg = "EMAIL_PROVIDER=mailpit is only allowed in development/test."
+            raise ValueError(msg)
+        if self.email_provider == "memory" and self.app_env not in {"development", "test"}:
+            msg = "EMAIL_PROVIDER=memory is only allowed in development/test."
+            raise ValueError(msg)
+        if self.minimum_age_years < 13 or self.minimum_age_years > 25:
+            msg = "MINIMUM_AGE_YEARS must be between 13 and 25."
+            raise ValueError(msg)
+        for name, value in (
+            ("OTP_TTL_SECONDS", self.otp_ttl_seconds),
+            ("OTP_RESEND_COOLDOWN_SECONDS", self.otp_resend_cooldown_seconds),
+            ("OTP_MAX_ATTEMPTS", self.otp_max_attempts),
+            ("REFRESH_TOKEN_DAYS", self.refresh_token_days),
+            ("REFRESH_ROTATION_GRACE_SECONDS", self.refresh_rotation_grace_seconds),
+            ("PROFILE_PHOTO_MAX_BYTES", self.profile_photo_max_bytes),
+        ):
+            if value <= 0:
+                msg = f"{name} must be greater than zero."
+                raise ValueError(msg)
         return self
 
 

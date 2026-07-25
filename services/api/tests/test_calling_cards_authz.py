@@ -201,6 +201,7 @@ async def test_rate_limits(world: CallingCardWorld, monkeypatch: pytest.MonkeyPa
             display_name="Third",
             account_status="active",
             age_verified=True,
+            onboarding_state="completed",
         )
         world.session.add(third)
         await world.session.flush()
@@ -211,6 +212,7 @@ async def test_rate_limits(world: CallingCardWorld, monkeypatch: pytest.MonkeyPa
                 ghost_mode=False,
                 discoverable_in_venue=True,
                 allow_calling_cards=True,
+                allow_messages_from_connections=True,
             )
         )
         entered = datetime.now(UTC) - timedelta(minutes=5)

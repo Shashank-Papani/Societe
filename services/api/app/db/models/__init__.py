@@ -1,3 +1,11 @@
+from app.db.models.auth import (
+    AuthIdentity,
+    AuthRefreshSession,
+    OtpChallenge,
+    ProfileMediaAsset,
+    UserInterest,
+    UserPolicyAcceptance,
+)
 from app.db.models.media import (
     ContentReport,
     LiveVibe,
@@ -14,6 +22,8 @@ from app.db.models.user import User, UserDevice, UserPrivacySettings
 from app.db.models.venue import Venue, VenueHours
 
 __all__ = [
+    "AuthIdentity",
+    "AuthRefreshSession",
     "CallingCard",
     "CheckIn",
     "ConnectionGrant",
@@ -27,10 +37,14 @@ __all__ = [
     "Message",
     "ModerationCase",
     "ModerationSignal",
+    "OtpChallenge",
     "OutboxEvent",
+    "ProfileMediaAsset",
     "User",
     "UserBlock",
     "UserDevice",
+    "UserInterest",
+    "UserPolicyAcceptance",
     "UserPrivacySettings",
     "Venue",
     "VenueHours",

@@ -38,6 +38,18 @@ class MessagingAuthorizer:
                 "Account is not active.",
                 status_code=403,
             )
+        if user.onboarding_state == "age_ineligible":
+            raise AppError(
+                "AGE_INELIGIBLE",
+                "This account does not meet the minimum age requirement.",
+                status_code=403,
+            )
+        if user.onboarding_state != "completed":
+            raise AppError(
+                "ONBOARDING_INCOMPLETE",
+                "Finish onboarding before messaging.",
+                status_code=403,
+            )
 
     async def is_blocked(self, a: UUID, b: UUID) -> bool:
         result = await self._session.execute(
@@ -89,12 +101,20 @@ class MessagingAuthorizer:
                 "The other account is not available for messaging.",
                 status_code=403,
             )
+        if other.onboarding_state != "completed":
+            raise AppError(
+                "PEER_ONBOARDING_INCOMPLETE",
+                "The other account is not available for messaging.",
+                status_code=403,
+            )
         if await self.is_blocked(actor.id, other_user_id):
             raise AppError(
                 "MESSAGING_BLOCKED",
                 "Messaging is not allowed while a block is in place.",
                 status_code=403,
             )
+        self._assert_messaging_privacy(actor)
+        self._assert_messaging_privacy(other)
         low, high = canonical_pair(actor.id, other_user_id)
         grant = await self.load_active_grant_for_pair(low, high)
         if grant is None:
@@ -104,6 +124,22 @@ class MessagingAuthorizer:
                 status_code=403,
             )
         return grant
+
+    @staticmethod
+    def _assert_messaging_privacy(user: User) -> None:
+        privacy = user.privacy
+        if privacy is None:
+            raise AppError(
+                "MESSAGING_DISABLED",
+                "Messaging preferences are missing.",
+                status_code=403,
+            )
+        if privacy.ghost_mode or not privacy.allow_messages_from_connections:
+            raise AppError(
+                "MESSAGING_DISABLED",
+                "Messaging is disabled by privacy settings.",
+                status_code=403,
+            )
 
     async def assert_member(self, conversation: Conversation, user_id: UUID) -> None:
         if user_id not in {conversation.user_low_id, conversation.user_high_id}:

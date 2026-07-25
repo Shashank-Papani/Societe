@@ -1,6 +1,6 @@
 # Société — current state
 
-Last updated: 2026-07-24 (Phase 5 private messaging in progress / implemented locally)
+Last updated: 2026-07-25 (Phase 6 auth / onboarding / profiles in progress)
 
 ## Completed phases
 
@@ -11,12 +11,16 @@ Last updated: 2026-07-24 (Phase 5 private messaging in progress / implemented lo
 | 2 Presence + geofencing | Complete | `phase-2-complete` |
 | 3 Live Vibes + media | Complete | Checkpoint commit; gallery upload verified |
 | 4 Calling Cards + realtime | Complete | `phase-4-complete` |
-| 5 Private messaging | Implemented locally | Not committed/tagged yet |
+| 5 Private messaging | Complete | Merged to main |
+| 6 Auth / onboarding / profiles | In progress | Product Phase 6 (architecture Phase 1 gaps) |
 
 ## Latest migration
 
-`0006_private_messaging` — conversations, conversation_members, messages;
-`connection_grants.expires_at` nullable (NULL = durable for messaging).
+`0007_auth_onboarding_profiles` — OTP identities/challenges, refresh sessions,
+policy acceptance history, onboarding/age fields, profile media, privacy
+extensions.
+
+Previous: `0006_private_messaging`.
 
 ## Feature flags (local)
 
@@ -26,28 +30,39 @@ FF_VENUE_PEOPLE_DISCOVERY=true
 FF_PRIVATE_MESSAGING=true
 FF_LOCATION_SIMULATOR=true
 FF_MEDIA_POSTING=true
+EMAIL_PROVIDER=mailpit
 ```
 
 Do not commit `.env` or production secrets.
 
-## Manual tests (Phase 5)
+## Auth notes
 
-1. Accept a Calling Card between Dev Alpha / Dev Beta.
-2. Open Messages from Connect; create/open conversation.
-3. Send both directions without manual refresh (realtime invalidation).
-4. Unread clears on open.
-5. Offline send → reconnect → exactly one copy.
-6. Leave venue → messaging still works (durable grant).
-7. Block → new sends rejected; history intact; unblock restores grant + messaging.
+- Normal users: passwordless email OTP (`/v1/auth/otp/*`) + rotating refresh.
+- Dev Alpha / Dev Beta: `POST /v1/auth/local/token` only when
+  `APP_ENV` is development/test.
+- Access token TTL remains configurable (default 60) until mobile refresh +
+  single-retry-on-401 are verified; 15 minutes is the approved next default.
+- Staging/production require `EMAIL_PROVIDER=ses` (fail closed; no Mailpit fallback).
+
+## Manual tests (Phase 6)
+
+1. New email → OTP via Mailpit → onboarding → main app.
+2. Restart app → session restores (refresh if needed).
+3. Sign out → OTP sign-in restores same account.
+4. Second session → revoke → refresh fails.
+5. Privacy changes affect discovery/cards/messaging.
+6. Deactivate → social actions stop; OTP offers reactivation.
+7. Dev Alpha / Dev Beta still work at Echo Basement (vibes, cards, messages).
 
 ## Known limitations
 
-- Text-only messages (no media / reactions / typing / E2E).
-- Architecture §25 “Phase 5 Safety” (App Attest, QR, BLE) is deferred; product
-  Phase 5 is private messaging (see ADRs 0014–0017).
-- Push is local stub only.
+- Cognito / Apple / Google sign-in deferred.
+- Production SES not deployed in this phase.
+- Profile photo is single optional asset (no gallery).
+- Username locked after onboarding (Phase 6).
+- No regulatory compliance claims without legal review.
 
 ## Next recommended phase
 
-Safety and anti-spoofing (architecture’s former Phase 5), or production infra,
-per product priority.
+Architecture Safety / anti-spoofing, or production infrastructure, per product
+priority.

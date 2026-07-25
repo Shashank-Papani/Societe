@@ -262,6 +262,7 @@ async def build_calling_card_world(
         display_name="Card Sender",
         account_status="active",
         age_verified=True,
+        onboarding_state="completed",
     )
     recipient = User(
         auth_subject=f"cc-recipient-{suffix}",
@@ -269,6 +270,7 @@ async def build_calling_card_world(
         display_name="Card Recipient",
         account_status="active",
         age_verified=True,
+        onboarding_state="completed",
     )
     session.add_all([sender, recipient])
     await session.flush()
@@ -279,6 +281,7 @@ async def build_calling_card_world(
             ghost_mode=False,
             discoverable_in_venue=True,
             allow_calling_cards=True,
+            allow_messages_from_connections=True,
         )
         session.add(privacy)
         user.privacy = privacy

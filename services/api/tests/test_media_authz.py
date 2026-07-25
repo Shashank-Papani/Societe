@@ -91,6 +91,8 @@ def make_user(**overrides: Any) -> User:
         "handle": "poster",
         "display_name": "Poster",
         "account_status": "active",
+        "onboarding_state": "completed",
+        "age_verified": True,
         "deleted_at": None,
     }
     fields.update(overrides)

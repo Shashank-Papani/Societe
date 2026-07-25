@@ -51,10 +51,24 @@ async def discoverable_users(
     settings: Annotated[Settings, Depends(get_settings)],
     ctx: Annotated[CurrentUserContext, Depends(get_current_user)],
 ) -> dict[str, Any]:
+    from app.modules.identity.social_gate import assert_socially_eligible
+
+    assert_socially_eligible(ctx.user, action="venue_discovery")
     data = await _service(session, settings).discoverable_users(user=ctx.user, now=_now(request))
     return success_response(data.model_dump(mode="json"), meta=_meta(request)).model_dump(
         mode="json"
     )
+
+
+@router.get("/me/blocked-users")
+async def list_blocked_users(
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_db)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    ctx: Annotated[CurrentUserContext, Depends(get_current_user)],
+) -> dict[str, Any]:
+    data = await _service(session, settings).list_blocked_users(user=ctx.user)
+    return success_response(data, meta=_meta(request)).model_dump(mode="json")
 
 
 @router.post("/calling-cards")
