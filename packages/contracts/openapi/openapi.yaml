@@ -129,6 +129,39 @@ components:
           title: Other User Id
       title: CreateConversationRequest
       type: object
+    CreateInvitationRequest:
+      additionalProperties: false
+      properties:
+        email:
+          maxLength: 320
+          minLength: 3
+          title: Email
+          type: string
+        role:
+          enum:
+          - owner
+          - manager
+          - content_editor
+          - analyst
+          title: Role
+          type: string
+      required:
+      - email
+      - role
+      title: CreateInvitationRequest
+      type: object
+    CreateOrganizationRequest:
+      additionalProperties: false
+      properties:
+        name:
+          maxLength: 120
+          minLength: 2
+          title: Name
+          type: string
+      required:
+      - name
+      title: CreateOrganizationRequest
+      type: object
     CreateReportRequest:
       additionalProperties: false
       properties:
@@ -447,6 +480,31 @@ components:
           title: Refresh Token
       title: LogoutBody
       type: object
+    ManagedVenueProfileUpdate:
+      additionalProperties: false
+      properties:
+        description:
+          anyOf:
+          - maxLength: 4000
+            type: string
+          - type: 'null'
+          title: Description
+        experience_tags:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          title: Experience Tags
+        music_tags:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          title: Music Tags
+      title: ManagedVenueProfileUpdate
+      type: object
     MarkReadRequest:
       additionalProperties: false
       properties:
@@ -709,6 +767,18 @@ components:
       - refresh_token
       title: RefreshBody
       type: object
+    RejectVenueClaimRequest:
+      additionalProperties: false
+      properties:
+        reason:
+          maxLength: 500
+          minLength: 3
+          title: Reason
+          type: string
+      required:
+      - reason
+      title: RejectVenueClaimRequest
+      type: object
     RespondCallingCardRequest:
       additionalProperties: false
       properties:
@@ -759,6 +829,17 @@ components:
       - body
       - client_message_id
       title: SendMessageRequest
+      type: object
+    SetVenueCoverRequest:
+      additionalProperties: false
+      properties:
+        media_asset_id:
+          format: uuid
+          title: Media Asset Id
+          type: string
+      required:
+      - media_asset_id
+      title: SetVenueCoverRequest
       type: object
     ShareCallingCardRequest:
       additionalProperties: false
@@ -845,6 +926,56 @@ components:
       - device_id
       title: SimulatorRequest
       type: object
+    SubmitVenueClaimRequest:
+      additionalProperties: false
+      properties:
+        business_email:
+          anyOf:
+          - maxLength: 320
+            type: string
+          - type: 'null'
+          title: Business Email
+        evidence_reference:
+          anyOf:
+          - maxLength: 500
+            type: string
+          - type: 'null'
+          title: Evidence Reference
+        justification:
+          anyOf:
+          - maxLength: 2000
+            type: string
+          - type: 'null'
+          title: Justification
+        organization_id:
+          anyOf:
+          - format: uuid
+            type: string
+          - type: 'null'
+          title: Organization Id
+        requested_organization_name:
+          anyOf:
+          - maxLength: 120
+            type: string
+          - type: 'null'
+          title: Requested Organization Name
+      title: SubmitVenueClaimRequest
+      type: object
+    UpdateMemberRoleRequest:
+      additionalProperties: false
+      properties:
+        role:
+          enum:
+          - owner
+          - manager
+          - content_editor
+          - analyst
+          title: Role
+          type: string
+      required:
+      - role
+      title: UpdateMemberRoleRequest
+      type: object
     ValidationError:
       properties:
         ctx:
@@ -912,6 +1043,76 @@ paths:
       summary: Health Ready
       tags:
       - health
+  /v1/admin/venue-claims/{claim_id}/approve:
+    post:
+      operationId: approve_venue_claim_v1_admin_venue_claims__claim_id__approve_post
+      parameters:
+      - in: path
+        name: claim_id
+        required: true
+        schema:
+          format: uuid
+          title: Claim Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Approve Venue Claim V1 Admin Venue Claims  Claim Id  Approve
+                  Post
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Approve Venue Claim
+      tags:
+      - organizations-admin
+  /v1/admin/venue-claims/{claim_id}/reject:
+    post:
+      operationId: reject_venue_claim_v1_admin_venue_claims__claim_id__reject_post
+      parameters:
+      - in: path
+        name: claim_id
+        required: true
+        schema:
+          format: uuid
+          title: Claim Id
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RejectVenueClaimRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Reject Venue Claim V1 Admin Venue Claims  Claim Id  Reject
+                  Post
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Reject Venue Claim
+      tags:
+      - organizations-admin
   /v1/auth/local/token:
     post:
       operationId: issue_local_dev_token_v1_auth_local_token_post
@@ -2214,6 +2415,23 @@ paths:
       summary: Onboarding Profile
       tags:
       - identity
+  /v1/me/organizations:
+    get:
+      operationId: list_my_organizations_v1_me_organizations_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response List My Organizations V1 Me Organizations Get
+                type: object
+          description: Successful Response
+      security:
+      - HTTPBearer: []
+      summary: List My Organizations
+      tags:
+      - organizations
   /v1/me/privacy:
     get:
       operationId: get_privacy_v1_me_privacy_get
@@ -2399,6 +2617,23 @@ paths:
       summary: Username Availability
       tags:
       - identity
+  /v1/me/venue-claims:
+    get:
+      operationId: list_my_venue_claims_v1_me_venue_claims_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response List My Venue Claims V1 Me Venue Claims Get
+                type: object
+          description: Successful Response
+      security:
+      - HTTPBearer: []
+      summary: List My Venue Claims
+      tags:
+      - organizations
   /v1/me/vibes:
     get:
       description: 'Creator history: expired vibes stay as metadata; media URLs are
@@ -2557,6 +2792,327 @@ paths:
       summary: Complete Upload
       tags:
       - media
+  /v1/organization-invitations/{invitation_id}/revoke:
+    post:
+      operationId: revoke_invitation_v1_organization_invitations__invitation_id__revoke_post
+      parameters:
+      - in: path
+        name: invitation_id
+        required: true
+        schema:
+          format: uuid
+          title: Invitation Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Revoke Invitation V1 Organization Invitations  Invitation
+                  Id  Revoke Post
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Revoke Invitation
+      tags:
+      - organizations
+  /v1/organization-invitations/{token}:
+    get:
+      operationId: get_invitation_v1_organization_invitations__token__get
+      parameters:
+      - in: path
+        name: token
+        required: true
+        schema:
+          title: Token
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Get Invitation V1 Organization Invitations  Token  Get
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Get Invitation
+      tags:
+      - organizations
+  /v1/organization-invitations/{token}/accept:
+    post:
+      operationId: accept_invitation_v1_organization_invitations__token__accept_post
+      parameters:
+      - in: path
+        name: token
+        required: true
+        schema:
+          title: Token
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Accept Invitation V1 Organization Invitations  Token  Accept
+                  Post
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Accept Invitation
+      tags:
+      - organizations
+  /v1/organizations:
+    post:
+      operationId: create_organization_v1_organizations_post
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Idempotency-Key
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrganizationRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Create Organization V1 Organizations Post
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Create Organization
+      tags:
+      - organizations
+  /v1/organizations/{organization_id}:
+    get:
+      operationId: get_organization_v1_organizations__organization_id__get
+      parameters:
+      - in: path
+        name: organization_id
+        required: true
+        schema:
+          format: uuid
+          title: Organization Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Get Organization V1 Organizations  Organization Id  Get
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Get Organization
+      tags:
+      - organizations
+  /v1/organizations/{organization_id}/invitations:
+    post:
+      operationId: invite_member_v1_organizations__organization_id__invitations_post
+      parameters:
+      - in: path
+        name: organization_id
+        required: true
+        schema:
+          format: uuid
+          title: Organization Id
+          type: string
+      - in: header
+        name: Idempotency-Key
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Idempotency-Key
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateInvitationRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Invite Member V1 Organizations  Organization Id  Invitations
+                  Post
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Invite Member
+      tags:
+      - organizations
+  /v1/organizations/{organization_id}/members:
+    get:
+      operationId: list_members_v1_organizations__organization_id__members_get
+      parameters:
+      - in: path
+        name: organization_id
+        required: true
+        schema:
+          format: uuid
+          title: Organization Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response List Members V1 Organizations  Organization Id  Members
+                  Get
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: List Members
+      tags:
+      - organizations
+  /v1/organizations/{organization_id}/members/{user_id}:
+    delete:
+      operationId: remove_member_v1_organizations__organization_id__members__user_id__delete
+      parameters:
+      - in: path
+        name: organization_id
+        required: true
+        schema:
+          format: uuid
+          title: Organization Id
+          type: string
+      - in: path
+        name: user_id
+        required: true
+        schema:
+          format: uuid
+          title: User Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Remove Member V1 Organizations  Organization Id  Members  User
+                  Id  Delete
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Remove Member
+      tags:
+      - organizations
+    patch:
+      operationId: update_member_role_v1_organizations__organization_id__members__user_id__patch
+      parameters:
+      - in: path
+        name: organization_id
+        required: true
+        schema:
+          format: uuid
+          title: Organization Id
+          type: string
+      - in: path
+        name: user_id
+        required: true
+        schema:
+          format: uuid
+          title: User Id
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMemberRoleRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Update Member Role V1 Organizations  Organization
+                  Id  Members  User Id  Patch
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Update Member Role
+      tags:
+      - organizations
   /v1/presence/eligibility:
     post:
       description: 'Read-only eligibility preview for the selected venue.
@@ -2793,6 +3349,38 @@ paths:
       summary: Block User
       tags:
       - social
+  /v1/venue-claims/{claim_id}/cancel:
+    post:
+      operationId: cancel_venue_claim_v1_venue_claims__claim_id__cancel_post
+      parameters:
+      - in: path
+        name: claim_id
+        required: true
+        schema:
+          format: uuid
+          title: Claim Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Cancel Venue Claim V1 Venue Claims  Claim Id  Cancel
+                  Post
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Cancel Venue Claim
+      tags:
+      - organizations
   /v1/venues/me/discoverable-users:
     get:
       operationId: discoverable_users_v1_venues_me_discoverable_users_get
@@ -2842,6 +3430,164 @@ paths:
       summary: Get Venue
       tags:
       - venues
+  /v1/venues/{venue_id}/claims:
+    post:
+      operationId: submit_venue_claim_v1_venues__venue_id__claims_post
+      parameters:
+      - in: path
+        name: venue_id
+        required: true
+        schema:
+          format: uuid
+          title: Venue Id
+          type: string
+      - in: header
+        name: Idempotency-Key
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Idempotency-Key
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitVenueClaimRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Submit Venue Claim V1 Venues  Venue Id  Claims Post
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Submit Venue Claim
+      tags:
+      - organizations
+  /v1/venues/{venue_id}/cover:
+    delete:
+      operationId: remove_venue_cover_v1_venues__venue_id__cover_delete
+      parameters:
+      - in: path
+        name: venue_id
+        required: true
+        schema:
+          format: uuid
+          title: Venue Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Remove Venue Cover V1 Venues  Venue Id  Cover Delete
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Remove Venue Cover
+      tags:
+      - organizations
+    put:
+      operationId: set_venue_cover_v1_venues__venue_id__cover_put
+      parameters:
+      - in: path
+        name: venue_id
+        required: true
+        schema:
+          format: uuid
+          title: Venue Id
+          type: string
+      - in: header
+        name: Idempotency-Key
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Idempotency-Key
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetVenueCoverRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Set Venue Cover V1 Venues  Venue Id  Cover Put
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Set Venue Cover
+      tags:
+      - organizations
+  /v1/venues/{venue_id}/managed-profile:
+    patch:
+      operationId: update_managed_profile_v1_venues__venue_id__managed_profile_patch
+      parameters:
+      - in: path
+        name: venue_id
+        required: true
+        schema:
+          format: uuid
+          title: Venue Id
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManagedVenueProfileUpdate'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Update Managed Profile V1 Venues  Venue Id  Managed
+                  Profile Patch
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Update Managed Profile
+      tags:
+      - organizations
   /v1/venues/{venue_id}/vibes:
     get:
       description: Authenticated read. Presence is not required to browse a venue's

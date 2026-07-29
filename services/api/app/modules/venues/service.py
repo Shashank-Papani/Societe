@@ -3,16 +3,30 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
 from app.core.errors import AppError
+from app.core.logging import get_logger
+from app.db.models import MediaAsset, MediaDerivative, Venue
 from app.db.session import get_redis
+from app.modules.media.storage import build_object_storage
 from app.modules.venues.cache import VenueStaticCache
 from app.modules.venues.filters import MapVenuesQuery
 from app.modules.venues.repository import VenueRepository
 from app.shared.cursors import query_fingerprint, sign_cursor, verify_cursor
+
+logger = get_logger(__name__)
+
+# Prefer poster-like ready derivatives; never expose object keys to clients.
+_COVER_VARIANT_PREFERENCE = (
+    "feed_poster",
+    "image_1080",
+    "video_poster",
+    "image_720",
+    "thumbnail",
+)
 
 
 class VenueService:
@@ -121,6 +135,7 @@ class VenueService:
         )
         coord = coords.mappings().one()
         hours = await self._repo.list_hours(venue_id)
+        cover_media_id, cover_image_url = await self._cover_projection(venue)
         return {
             "id": str(venue.id),
             "slug": venue.slug,
@@ -137,6 +152,8 @@ class VenueService:
             "price_band": venue.price_band,
             "music_tags": list(venue.music_tags or []),
             "experience_tags": list(venue.experience_tags or []),
+            "cover_media_id": cover_media_id,
+            "cover_image_url": cover_image_url,
             "centroid": {
                 "latitude": float(coord["lat"]),
                 "longitude": float(coord["lng"]),
@@ -151,3 +168,58 @@ class VenueService:
                 for h in hours
             ],
         }
+
+    async def _cover_projection(self, venue: Venue) -> tuple[str | None, str | None]:
+        """Return safe cover id + signed URL. Never expose object keys."""
+        media_id = venue.primary_cover_media_id
+        if media_id is None:
+            return None, None
+
+        asset = await self._session.get(MediaAsset, media_id)
+        if (
+            asset is None
+            or asset.deleted_at is not None
+            or asset.purpose != "venue_owned"
+            or asset.venue_id != venue.id
+            or asset.lifecycle_status != "ready"
+            or asset.moderation_status != "approved"
+        ):
+            return None, None
+
+        cover_media_id = str(asset.id)
+        result = await self._session.execute(
+            select(MediaDerivative).where(
+                MediaDerivative.media_asset_id == asset.id,
+                MediaDerivative.generation == asset.generation,
+                MediaDerivative.status == "ready",
+            )
+        )
+        derivatives = list(result.scalars().all())
+        if not derivatives:
+            return cover_media_id, None
+
+        by_type = {d.variant_type: d for d in derivatives}
+        chosen: MediaDerivative | None = None
+        for variant in _COVER_VARIANT_PREFERENCE:
+            if variant in by_type:
+                chosen = by_type[variant]
+                break
+        if chosen is None:
+            chosen = derivatives[0]
+
+        try:
+            storage = build_object_storage(self._settings)
+            url = await storage.presign_get(
+                bucket=self._settings.media_processed_bucket,
+                key=chosen.object_key,
+                expires_in=self._settings.media_signed_url_ttl_seconds,
+            )
+        except Exception:
+            logger.warning(
+                "venue_cover_signed_url_unavailable",
+                venue_id=str(venue.id),
+                media_asset_id=cover_media_id,
+            )
+            return cover_media_id, None
+
+        return cover_media_id, url

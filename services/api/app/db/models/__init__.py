@@ -16,6 +16,14 @@ from app.db.models.media import (
     ModerationSignal,
 )
 from app.db.models.messaging import Conversation, ConversationMember, Message
+from app.db.models.organization import (
+    Organization,
+    OrganizationInvitation,
+    OrganizationMember,
+    VenueAuditEvent,
+    VenueClaim,
+    VenueOrganization,
+)
 from app.db.models.presence import CheckIn, OutboxEvent
 from app.db.models.social import CallingCard, ConnectionGrant, UserBlock
 from app.db.models.user import User, UserDevice, UserPrivacySettings
@@ -37,6 +45,9 @@ __all__ = [
     "Message",
     "ModerationCase",
     "ModerationSignal",
+    "Organization",
+    "OrganizationInvitation",
+    "OrganizationMember",
     "OtpChallenge",
     "OutboxEvent",
     "ProfileMediaAsset",
@@ -47,5 +58,8 @@ __all__ = [
     "UserPolicyAcceptance",
     "UserPrivacySettings",
     "Venue",
+    "VenueAuditEvent",
+    "VenueClaim",
     "VenueHours",
+    "VenueOrganization",
 ]

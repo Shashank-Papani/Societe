@@ -33,11 +33,16 @@ class MediaAsset(Base):
     venue_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("app.venues.id", ondelete="CASCADE"), nullable=False
     )
-    author_check_in_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("app.check_ins.id", ondelete="RESTRICT"), nullable=False
+    # live_vibe (default) requires check-in + device; venue_owned requires organization_id.
+    purpose: Mapped[str] = mapped_column(Text, nullable=False, server_default="live_vibe")
+    organization_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("app.organizations.id", ondelete="SET NULL")
     )
-    device_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("app.user_devices.id", ondelete="RESTRICT"), nullable=False
+    author_check_in_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("app.check_ins.id", ondelete="RESTRICT")
+    )
+    device_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("app.user_devices.id", ondelete="RESTRICT")
     )
     media_type: Mapped[str] = mapped_column(Text, nullable=False)
     lifecycle_status: Mapped[str] = mapped_column(

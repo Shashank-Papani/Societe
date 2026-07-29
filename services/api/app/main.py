@@ -25,6 +25,8 @@ from app.modules.identity.auth_router import router as auth_router
 from app.modules.identity.router import router as identity_router
 from app.modules.media.router import router as media_router
 from app.modules.messaging.router import router as messaging_router
+from app.modules.organizations import admin_router as organizations_admin_router
+from app.modules.organizations import router as organizations_router
 from app.modules.presence.router import router as presence_router
 from app.modules.realtime.router import router as realtime_router
 from app.modules.social.router import router as social_router
@@ -82,6 +84,8 @@ def create_app() -> FastAPI:
     application.include_router(social_router)
     application.include_router(messaging_router)
     application.include_router(realtime_router)
+    application.include_router(organizations_router)
+    application.include_router(organizations_admin_router)
 
     setup_telemetry(application, settings)
     return application

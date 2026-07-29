@@ -34,6 +34,10 @@ DEV_PERSONAS: Final[dict[str, DevPersona]] = {
     ),
 }
 
+# Server-controlled claim-review fixture subjects (auth_subject, never handle).
+# Dev Beta and arbitrary local users are intentionally excluded.
+DEV_VENUE_CLAIM_ADMIN_SUBJECTS: Final[frozenset[str]] = frozenset({DEV_PERSONAS["alpha"].subject})
+
 
 def resolve_dev_persona(persona: str) -> DevPersona:
     resolved = DEV_PERSONAS.get(persona)

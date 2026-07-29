@@ -303,6 +303,7 @@ def test_configuring_the_noop_scanner_for_production_fails_validation() -> None:
             auth_provider="cognito",
             media_malware_scanner="noop",
             ff_location_simulator=False,
+            ff_venue_claim_admin=False,
         )
 
 
@@ -314,6 +315,7 @@ def test_configuring_the_fake_moderator_for_production_fails_validation() -> Non
             media_malware_scanner="clamav",
             media_moderation_provider="fake",
             ff_location_simulator=False,
+            ff_venue_claim_admin=False,
         )
 
 

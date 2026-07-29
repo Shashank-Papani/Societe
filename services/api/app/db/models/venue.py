@@ -69,6 +69,10 @@ class Venue(Base):
     supports_wifi_proof: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="false"
     )
+    # Explicit owner-selected cover (venue-owned media only — never a Live Vibe URL).
+    primary_cover_media_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("app.media_assets.id", ondelete="SET NULL")
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

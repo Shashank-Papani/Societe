@@ -179,6 +179,10 @@ class Settings(BaseSettings):
     otel_service_name: str = "societe-api"
     otel_exporter_otlp_endpoint: str | None = None
 
+    organization_invitation_ttl_seconds: int = 7 * 86400
+    venue_claim_rate_limit_per_user_per_hour: int = 10
+    organization_invitation_rate_limit_per_org_per_hour: int = 50
+
     ff_live_crowd_counts: bool = False
     ff_calling_cards: bool = False
     ff_venue_people_discovery: bool = False
@@ -189,6 +193,8 @@ class Settings(BaseSettings):
     ff_automated_moderation: bool = False
     ff_ghost_mode: bool = True
     ff_location_simulator: bool = False
+    ff_venue_organizations: bool = True
+    ff_venue_claim_admin: bool = False
 
     @model_validator(mode="after")
     def reject_location_simulator_outside_development(self) -> Settings:
@@ -200,6 +206,16 @@ class Settings(BaseSettings):
             raise ValueError(msg)
         if self.ff_location_simulator and self.app_env not in {"development", "test"}:
             msg = "FF_LOCATION_SIMULATOR=true requires APP_ENV development or test."
+            raise ValueError(msg)
+        return self
+
+    @model_validator(mode="after")
+    def reject_venue_claim_admin_outside_development(self) -> Settings:
+        if self.ff_venue_claim_admin and self.app_env in {"staging", "production"}:
+            msg = (
+                "FF_VENUE_CLAIM_ADMIN=true is forbidden when APP_ENV is "
+                f"{self.app_env!r}. Claim admin is a development/test fixture only."
+            )
             raise ValueError(msg)
         return self
 
