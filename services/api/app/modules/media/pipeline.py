@@ -472,11 +472,23 @@ class MediaPipeline:
                     )
                 )
             else:
-                outcome = PipelineOutcome(status="completed", detail="approved_without_vibe")
+                from app.modules.stories.publication import publish_content_for_media_asset
+
+                handled = await publish_content_for_media_asset(
+                    self._session, asset.id, now=now, settings=self._settings
+                )
+                outcome = PipelineOutcome(
+                    status="completed",
+                    detail="published" if handled else "approved_without_vibe",
+                )
         elif result.decision == "rejected":
             self._media.mark_rejected(asset, now=now, summary=summary)
             if vibe is not None:
                 self._vibes.reject(vibe, now=now, reason="moderation_rejected")
+            else:
+                from app.modules.stories.publication import reject_content_for_media_asset
+
+                await reject_content_for_media_asset(self._session, asset.id, now=now)
             outcome = PipelineOutcome(status="rejected", detail="moderation_rejected")
         else:
             self._media.mark_manual_review(asset, now=now, summary=summary)

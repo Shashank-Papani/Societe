@@ -150,6 +150,13 @@ class Settings(BaseSettings):
     retention_rejected_original_days: int = 3
     retention_processed_derivative_days: int = 7
 
+    # Stories + official venue content (Phase 8A).
+    story_ttl_hours: int = 24
+    story_upload_rate_limit_per_user_per_hour: int = 30
+    official_story_upload_rate_limit_per_org_per_hour: int = 60
+    story_report_rate_limit_per_user_per_hour: int = 20
+    official_post_rate_limit_per_org_per_hour: int = 60
+
     # Calling Cards (Phase 4). Venue is always taken from the caller's lease.
     calling_card_ttl_seconds: int = 1800
     decline_cooldown_seconds: int = 7200
@@ -195,6 +202,7 @@ class Settings(BaseSettings):
     ff_location_simulator: bool = False
     ff_venue_organizations: bool = True
     ff_venue_claim_admin: bool = False
+    ff_stories: bool = True
 
     @model_validator(mode="after")
     def reject_location_simulator_outside_development(self) -> Settings:

@@ -113,12 +113,23 @@ class MediaWorld:
                     SELECT id FROM app.media_assets WHERE venue_id = CAST(:venue AS uuid)
                     UNION ALL
                     SELECT id FROM app.check_ins WHERE venue_id = CAST(:venue AS uuid)
+                    UNION ALL
+                    SELECT id FROM app.stories WHERE venue_id = CAST(:venue AS uuid)
+                    UNION ALL
+                    SELECT id FROM app.official_venue_posts
+                        WHERE venue_id = CAST(:venue AS uuid)
                 )
                 """
             ),
             venue,
         )
         for statement in (
+            "DELETE FROM app.story_reports WHERE story_id IN "
+            "(SELECT id FROM app.stories WHERE venue_id = CAST(:venue AS uuid))",
+            "DELETE FROM app.story_views WHERE story_id IN "
+            "(SELECT id FROM app.stories WHERE venue_id = CAST(:venue AS uuid))",
+            "DELETE FROM app.stories WHERE venue_id = CAST(:venue AS uuid)",
+            "DELETE FROM app.official_venue_posts WHERE venue_id = CAST(:venue AS uuid)",
             "DELETE FROM app.media_assets WHERE venue_id = CAST(:venue AS uuid)",
             "DELETE FROM app.check_ins WHERE venue_id = CAST(:venue AS uuid)",
             "DELETE FROM app.venues WHERE id = CAST(:venue AS uuid)",

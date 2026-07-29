@@ -1,8 +1,8 @@
 """Migration 0010_venue_organizations integrity checks.
 
-Documents and verifies that Phase 7A lands as a single Alembic head.
-Upgrade/downgrade are exercised against a reachable database when available;
-otherwise those steps are skipped so unit CI can still assert head identity.
+Phase 7A lands as a linear revision. The live Alembic head may advance in
+later phases (currently 0011); this module still documents the 0009 → 0010
+chain and that 0010 remains a single ancestor, not a branch.
 """
 
 from __future__ import annotations
@@ -17,16 +17,15 @@ import pytest
 API_ROOT = Path(__file__).resolve().parents[1]
 REVISION = "0010_venue_organizations"
 DOWN_REVISION = "0009_presence_retention"
+CURRENT_HEAD = "0011_stories_official_content"
 
 
 def _alembic_env() -> dict[str, str]:
     env = os.environ.copy()
-    # Prefer the same URL the test suite uses.
     env.setdefault(
         "DATABASE_URL",
         "postgresql+asyncpg://societe:societe@localhost:5432/societe",
     )
-    # Alembic sync URL often uses psycopg; keep async URL and let env.ini adapt.
     return env
 
 
@@ -42,7 +41,7 @@ def _run_alembic(*args: str) -> subprocess.CompletedProcess[str]:
 
 
 def test_alembic_heads_is_exactly_one() -> None:
-    """Phase 7A must not introduce a second Alembic head."""
+    """The migration graph must remain a single head (now Phase 8A)."""
     result = _run_alembic("heads")
     assert result.returncode == 0, result.stderr or result.stdout
     heads = [
@@ -50,12 +49,13 @@ def test_alembic_heads_is_exactly_one() -> None:
         for line in result.stdout.splitlines()
         if line.strip() and not line.strip().startswith("FAILED")
     ]
-    # `alembic heads` prints one revision per line, optionally with "(head)".
-    revision_lines = [line for line in heads if REVISION in line or "head" in line.lower()]
+    revision_lines = [line for line in heads if "head" in line.lower() or CURRENT_HEAD in line]
     assert len(revision_lines) == 1, (
-        f"Expected a single Alembic head containing {REVISION}, got:\n{result.stdout}"
+        f"Expected a single Alembic head containing {CURRENT_HEAD}, got:\n{result.stdout}"
     )
-    assert REVISION in revision_lines[0]
+    assert CURRENT_HEAD in revision_lines[0]
+    # 0010 must not remain a competing head.
+    assert not any(REVISION in line and CURRENT_HEAD not in line for line in revision_lines)
 
 
 def test_migration_0010_revises_presence_retention() -> None:
@@ -66,7 +66,6 @@ def test_migration_0010_revises_presence_retention() -> None:
     assert f'down_revision: str | None = "{DOWN_REVISION}"' in text
     assert "def upgrade() -> None:" in text
     assert "def downgrade() -> None:" in text
-    # Core Phase 7A objects.
     for table in (
         "app.organizations",
         "app.organization_members",
@@ -80,39 +79,34 @@ def test_migration_0010_revises_presence_retention() -> None:
     assert "purpose" in text
 
 
-def test_upgrade_and_downgrade_when_database_available() -> None:
-    """
-    Optional round-trip against local Compose Postgres.
-
-    Destructive: downgrade drops Phase 7A tables. Only runs when
-    ``SOCIETE_TEST_MIGRATION_ROUNDTRIP=1`` is set and Postgres is reachable.
-    Otherwise we only verify ``alembic upgrade`` to the Phase 7A head is a no-op
-    (or succeeds) when the database is already available.
-    """
+def test_upgrade_to_head_when_database_available() -> None:
+    """Upgrade to the current head (includes 0010 as an ancestor)."""
     current = _run_alembic("current")
     if current.returncode != 0:
         pytest.skip(f"Alembic cannot read current revision: {current.stderr}")
 
-    up = _run_alembic("upgrade", REVISION)
+    up = _run_alembic("upgrade", "head")
     if up.returncode != 0:
         pytest.skip(f"Database unavailable for upgrade: {up.stderr or up.stdout}")
 
     after_up = _run_alembic("current")
     assert after_up.returncode == 0, after_up.stderr
-    assert REVISION in after_up.stdout
+    assert CURRENT_HEAD in after_up.stdout
 
     if os.getenv("SOCIETE_TEST_MIGRATION_ROUNDTRIP") != "1":
         pytest.skip(
             "Set SOCIETE_TEST_MIGRATION_ROUNDTRIP=1 to exercise destructive "
-            "downgrade/upgrade round-trip for 0010_venue_organizations."
+            "downgrade/upgrade round-trip through 0010_venue_organizations."
         )
 
-    down = _run_alembic("downgrade", DOWN_REVISION)
+    # Round-trip through 0010, then restore head (0011).
+    down = _run_alembic("downgrade", REVISION)
     assert down.returncode == 0, down.stderr or down.stdout
+    at_0010 = _run_alembic("current")
+    assert REVISION in at_0010.stdout
 
-    restore = _run_alembic("upgrade", REVISION)
+    restore = _run_alembic("upgrade", "head")
     assert restore.returncode == 0, restore.stderr or restore.stdout
-
     after = _run_alembic("current")
     assert after.returncode == 0, after.stderr
-    assert REVISION in after.stdout
+    assert CURRENT_HEAD in after.stdout

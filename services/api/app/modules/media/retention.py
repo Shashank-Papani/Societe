@@ -24,9 +24,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
 from app.core.logging import get_logger
-from app.db.models import LiveVibe, MediaAsset, MediaDerivative, OutboxEvent
+from app.db.models import LiveVibe, MediaAsset, MediaDerivative, OutboxEvent, Story
 from app.modules.media.lifecycle import MediaLifecycleService, VibeLifecycleService
 from app.modules.media.storage import ObjectStorage, build_object_storage
+from app.modules.stories.lifecycle import expire_story
 
 logger = get_logger(__name__)
 
@@ -37,6 +38,7 @@ DERIVATIVE_BEARING_STATUSES = frozenset({"ready", "manual_review"})
 @dataclass(frozen=True)
 class RetentionResult:
     expired_vibes: int = 0
+    expired_stories: int = 0
     expired_intents: int = 0
     incomplete_uploads_purged: int = 0
     processed_originals_purged: int = 0
@@ -47,6 +49,7 @@ class RetentionResult:
     def total(self) -> int:
         return (
             self.expired_vibes
+            + self.expired_stories
             + self.expired_intents
             + self.incomplete_uploads_purged
             + self.processed_originals_purged
@@ -104,6 +107,41 @@ class MediaRetentionService:
         if vibes:
             await self._session.commit()
         return len(vibes)
+
+    async def expire_due_stories(self, *, now: datetime, limit: int = 200) -> int:
+        """Published Stories past their 24h window stop being public immediately."""
+        result = await self._session.execute(
+            select(Story)
+            .where(
+                Story.publication_status.in_(("published", "hidden")),
+                Story.expires_at.is_not(None),
+                Story.expires_at <= now,
+            )
+            .order_by(Story.expires_at)
+            .limit(limit)
+            .with_for_update(skip_locked=True)
+        )
+        stories = list(result.scalars().all())
+        for story in stories:
+            expire_story(story, now=now)
+            self._session.add(
+                OutboxEvent(
+                    aggregate_type="story",
+                    aggregate_id=story.id,
+                    event_type="story.expired",
+                    payload={
+                        "story_id": str(story.id),
+                        "venue_id": str(story.venue_id),
+                        "media_asset_id": str(story.media_asset_id),
+                        "expired_at": now.isoformat(),
+                    },
+                    occurred_at=now,
+                    available_at=now,
+                )
+            )
+        if stories:
+            await self._session.commit()
+        return len(stories)
 
     # --------------------------------------------------------------- retention
 
@@ -200,6 +238,7 @@ class MediaRetentionService:
     async def run_all(self, *, now: datetime) -> RetentionResult:
         return RetentionResult(
             expired_vibes=await self.expire_due_vibes(now=now),
+            expired_stories=await self.expire_due_stories(now=now),
             incomplete_uploads_purged=await self.purge_incomplete_uploads(now=now),
             processed_originals_purged=await self.purge_processed_originals(now=now),
             rejected_originals_purged=await self.purge_rejected_originals(now=now),

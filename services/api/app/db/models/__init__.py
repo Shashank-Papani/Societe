@@ -26,6 +26,7 @@ from app.db.models.organization import (
 )
 from app.db.models.presence import CheckIn, OutboxEvent
 from app.db.models.social import CallingCard, ConnectionGrant, UserBlock
+from app.db.models.story import OfficialVenuePost, Story, StoryReport, StoryView
 from app.db.models.user import User, UserDevice, UserPrivacySettings
 from app.db.models.venue import Venue, VenueHours
 
@@ -45,12 +46,16 @@ __all__ = [
     "Message",
     "ModerationCase",
     "ModerationSignal",
+    "OfficialVenuePost",
     "Organization",
     "OrganizationInvitation",
     "OrganizationMember",
     "OtpChallenge",
     "OutboxEvent",
     "ProfileMediaAsset",
+    "Story",
+    "StoryReport",
+    "StoryView",
     "User",
     "UserBlock",
     "UserDevice",

@@ -36,6 +36,7 @@ def _test_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     monkeypatch.setenv("FF_PRIVATE_MESSAGING", "true")
     monkeypatch.setenv("FF_VENUE_ORGANIZATIONS", "true")
     monkeypatch.setenv("FF_VENUE_CLAIM_ADMIN", "true")
+    monkeypatch.setenv("FF_STORIES", "true")
     # Phase 7A integration suites submit many claims as the same persona.
     monkeypatch.setenv("VENUE_CLAIM_RATE_LIMIT_PER_USER_PER_HOUR", "1000")
     monkeypatch.setenv("ORGANIZATION_INVITATION_RATE_LIMIT_PER_ORG_PER_HOUR", "1000")

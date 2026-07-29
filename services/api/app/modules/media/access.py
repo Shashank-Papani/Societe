@@ -11,7 +11,8 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 
 from app.core.config import Settings
-from app.db.models import LiveVibe, MediaAsset
+from app.db.models import LiveVibe, MediaAsset, OfficialVenuePost, Story
+from app.modules.stories.lifecycle import is_official_post_public, is_publicly_viewable
 
 #: Statuses that must never receive a new signed URL.
 _BLOCKED_ASSET = frozenset(
@@ -70,6 +71,29 @@ def may_issue_signed_urls(
     if vibe.publication_status == "expired":
         return creator_view and _creator_retention_allows(vibe, now=now, settings=settings)
 
+    return False
+
+
+def may_issue_content_signed_urls(
+    asset: MediaAsset,
+    *,
+    story: Story | None,
+    post: OfficialVenuePost | None,
+    now: datetime,
+    settings: Settings,
+) -> bool:
+    """Signed URLs for Story / official-post media (no LiveVibe required)."""
+    _ = settings
+    if asset.lifecycle_status != "ready":
+        return False
+    if asset.moderation_status != "approved":
+        return False
+    if asset.deleted_at is not None:
+        return False
+    if story is not None:
+        return is_publicly_viewable(story, now=now)
+    if post is not None:
+        return is_official_post_public(post)
     return False
 
 

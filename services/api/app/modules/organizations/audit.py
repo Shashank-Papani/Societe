@@ -24,6 +24,13 @@ VENUE_CLAIM_REJECTED = "venue.claim_rejected"
 VENUE_LINKED = "venue.linked"
 VENUE_COVER_SELECTED = "venue.cover_selected"
 VENUE_COVER_REMOVED = "venue.cover_removed"
+OFFICIAL_STORY_CREATED = "official_story.created"
+OFFICIAL_STORY_PUBLISHED = "official_story.published"
+OFFICIAL_STORY_DELETED = "official_story.deleted"
+OFFICIAL_POST_CREATED = "official_post.created"
+OFFICIAL_POST_PUBLISHED = "official_post.published"
+OFFICIAL_POST_ARCHIVED = "official_post.archived"
+OFFICIAL_POST_DELETED = "official_post.deleted"
 
 _FORBIDDEN_METADATA_KEYS = frozenset(
     {

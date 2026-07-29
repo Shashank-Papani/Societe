@@ -102,6 +102,37 @@
         "title": "BlockUserRequest",
         "type": "object"
       },
+      "CompleteStoryUploadRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "checksum_sha256": {
+            "anyOf": [
+              {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checksum Sha256"
+          },
+          "device_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device Id"
+          }
+        },
+        "title": "CompleteStoryUploadRequest",
+        "type": "object"
+      },
       "CompleteUploadRequest": {
         "additionalProperties": false,
         "properties": {
@@ -238,6 +269,195 @@
         "title": "CreateInvitationRequest",
         "type": "object"
       },
+      "CreateOfficialPostRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "body": {
+            "maxLength": 5000,
+            "minLength": 1,
+            "title": "Body",
+            "type": "string"
+          },
+          "byte_size": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Byte Size"
+          },
+          "call_to_action_type": {
+            "anyOf": [
+              {
+                "maxLength": 40,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Call To Action Type"
+          },
+          "call_to_action_url": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Call To Action Url"
+          },
+          "checksum_sha256": {
+            "anyOf": [
+              {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checksum Sha256"
+          },
+          "media_type": {
+            "anyOf": [
+              {
+                "enum": [
+                  "image",
+                  "video"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Media Type"
+          },
+          "mime_type": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 3,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mime Type"
+          },
+          "post_type": {
+            "enum": [
+              "announcement",
+              "event",
+              "dj",
+              "special",
+              "policy",
+              "promotion",
+              "general"
+            ],
+            "title": "Post Type",
+            "type": "string"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "required": [
+          "post_type",
+          "body"
+        ],
+        "title": "CreateOfficialPostRequest",
+        "type": "object"
+      },
+      "CreateOfficialStoryUploadRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "byte_size": {
+            "exclusiveMinimum": 0.0,
+            "title": "Byte Size",
+            "type": "integer"
+          },
+          "caption": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Caption"
+          },
+          "checksum_sha256": {
+            "anyOf": [
+              {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checksum Sha256"
+          },
+          "media_type": {
+            "enum": [
+              "image",
+              "video"
+            ],
+            "title": "Media Type",
+            "type": "string"
+          },
+          "mime_type": {
+            "maxLength": 100,
+            "minLength": 3,
+            "title": "Mime Type",
+            "type": "string"
+          },
+          "reply_policy": {
+            "default": "disabled",
+            "enum": [
+              "disabled",
+              "connections",
+              "everyone"
+            ],
+            "title": "Reply Policy",
+            "type": "string"
+          },
+          "vibe_tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Vibe Tags",
+            "type": "array"
+          }
+        },
+        "required": [
+          "media_type",
+          "mime_type",
+          "byte_size"
+        ],
+        "title": "CreateOfficialStoryUploadRequest",
+        "type": "object"
+      },
       "CreateOrganizationRequest": {
         "additionalProperties": false,
         "properties": {
@@ -286,6 +506,92 @@
           "reason"
         ],
         "title": "CreateReportRequest",
+        "type": "object"
+      },
+      "CreateStoryReportRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "reason": {
+            "enum": [
+              "spam",
+              "harassment",
+              "sexual_content",
+              "violence",
+              "hate",
+              "illegal",
+              "other"
+            ],
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "CreateStoryReportRequest",
+        "type": "object"
+      },
+      "CreateStoryReportResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "reason": {
+            "enum": [
+              "spam",
+              "harassment",
+              "sexual_content",
+              "violence",
+              "hate",
+              "illegal",
+              "other"
+            ],
+            "title": "Reason",
+            "type": "string"
+          },
+          "report_id": {
+            "format": "uuid",
+            "title": "Report Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "open",
+              "reviewing",
+              "resolved",
+              "dismissed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "story_id": {
+            "format": "uuid",
+            "title": "Story Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "report_id",
+          "story_id",
+          "reason",
+          "status",
+          "created_at"
+        ],
+        "title": "CreateStoryReportResponse",
         "type": "object"
       },
       "CreateUploadRequest": {
@@ -371,6 +677,130 @@
           "byte_size"
         ],
         "title": "CreateUploadRequest",
+        "type": "object"
+      },
+      "CreateUserStoryUploadRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "attribution_mode": {
+            "enum": [
+              "attributed",
+              "anonymous"
+            ],
+            "title": "Attribution Mode",
+            "type": "string"
+          },
+          "byte_size": {
+            "exclusiveMinimum": 0.0,
+            "title": "Byte Size",
+            "type": "integer"
+          },
+          "caption": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Caption"
+          },
+          "checksum_sha256": {
+            "anyOf": [
+              {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checksum Sha256"
+          },
+          "device_id": {
+            "format": "uuid",
+            "title": "Device Id",
+            "type": "string"
+          },
+          "media_type": {
+            "enum": [
+              "image",
+              "video"
+            ],
+            "title": "Media Type",
+            "type": "string"
+          },
+          "mime_type": {
+            "maxLength": 100,
+            "minLength": 3,
+            "title": "Mime Type",
+            "type": "string"
+          },
+          "reply_policy": {
+            "default": "disabled",
+            "enum": [
+              "disabled",
+              "connections",
+              "everyone"
+            ],
+            "title": "Reply Policy",
+            "type": "string"
+          },
+          "venue_id": {
+            "format": "uuid",
+            "title": "Venue Id",
+            "type": "string"
+          },
+          "vibe_tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Vibe Tags",
+            "type": "array"
+          }
+        },
+        "required": [
+          "venue_id",
+          "device_id",
+          "media_type",
+          "mime_type",
+          "byte_size",
+          "attribution_mode"
+        ],
+        "title": "CreateUserStoryUploadRequest",
+        "type": "object"
+      },
+      "DeleteStoryResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "publication_status": {
+            "enum": [
+              "draft",
+              "uploaded",
+              "processing",
+              "moderation_pending",
+              "published",
+              "expired",
+              "hidden",
+              "rejected",
+              "failed",
+              "deleted"
+            ],
+            "title": "Publication Status",
+            "type": "string"
+          },
+          "story_id": {
+            "format": "uuid",
+            "title": "Story Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "story_id",
+          "publication_status"
+        ],
+        "title": "DeleteStoryResponse",
         "type": "object"
       },
       "DeviceCreate": {
@@ -793,6 +1223,432 @@
         "title": "MarkReadRequest",
         "type": "object"
       },
+      "MediaVariant": {
+        "additionalProperties": false,
+        "description": "A signed, short-lived URL. Object keys never cross the boundary.",
+        "properties": {
+          "duration_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Duration Ms"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "height": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Height"
+          },
+          "mime_type": {
+            "title": "Mime Type",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          },
+          "variant_type": {
+            "title": "Variant Type",
+            "type": "string"
+          },
+          "width": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Width"
+          }
+        },
+        "required": [
+          "variant_type",
+          "mime_type",
+          "url",
+          "expires_at"
+        ],
+        "title": "MediaVariant",
+        "type": "object"
+      },
+      "OfficialPostCreateResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "post": {
+            "$ref": "#/components/schemas/OfficialPostDetail"
+          },
+          "upload": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OfficialPostUpload"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "post"
+        ],
+        "title": "OfficialPostCreateResponse",
+        "type": "object"
+      },
+      "OfficialPostDetail": {
+        "additionalProperties": false,
+        "properties": {
+          "author_label": {
+            "title": "Author Label",
+            "type": "string"
+          },
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "call_to_action_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Call To Action Type"
+          },
+          "call_to_action_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Call To Action Url"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "is_official": {
+            "default": true,
+            "title": "Is Official",
+            "type": "boolean"
+          },
+          "post_id": {
+            "format": "uuid",
+            "title": "Post Id",
+            "type": "string"
+          },
+          "post_type": {
+            "enum": [
+              "announcement",
+              "event",
+              "dj",
+              "special",
+              "policy",
+              "promotion",
+              "general"
+            ],
+            "title": "Post Type",
+            "type": "string"
+          },
+          "publication_status": {
+            "enum": [
+              "draft",
+              "processing",
+              "moderation_pending",
+              "published",
+              "archived",
+              "rejected",
+              "failed",
+              "deleted"
+            ],
+            "title": "Publication Status",
+            "type": "string"
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Published At"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Title"
+          },
+          "variants": {
+            "items": {
+              "$ref": "#/components/schemas/MediaVariant"
+            },
+            "title": "Variants",
+            "type": "array"
+          },
+          "venue": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VenueStoryProjection"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "venue_id": {
+            "format": "uuid",
+            "title": "Venue Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "post_id",
+          "venue_id",
+          "post_type",
+          "body",
+          "publication_status",
+          "author_label",
+          "created_at"
+        ],
+        "title": "OfficialPostDetail",
+        "type": "object"
+      },
+      "OfficialPostListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/OfficialPostSummary"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "OfficialPostListResponse",
+        "type": "object"
+      },
+      "OfficialPostSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "author_label": {
+            "title": "Author Label",
+            "type": "string"
+          },
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "call_to_action_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Call To Action Type"
+          },
+          "call_to_action_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Call To Action Url"
+          },
+          "is_official": {
+            "default": true,
+            "title": "Is Official",
+            "type": "boolean"
+          },
+          "post_id": {
+            "format": "uuid",
+            "title": "Post Id",
+            "type": "string"
+          },
+          "post_type": {
+            "enum": [
+              "announcement",
+              "event",
+              "dj",
+              "special",
+              "policy",
+              "promotion",
+              "general"
+            ],
+            "title": "Post Type",
+            "type": "string"
+          },
+          "publication_status": {
+            "enum": [
+              "draft",
+              "processing",
+              "moderation_pending",
+              "published",
+              "archived",
+              "rejected",
+              "failed",
+              "deleted"
+            ],
+            "title": "Publication Status",
+            "type": "string"
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Published At"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Title"
+          },
+          "variants": {
+            "items": {
+              "$ref": "#/components/schemas/MediaVariant"
+            },
+            "title": "Variants",
+            "type": "array"
+          },
+          "venue": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VenueStoryProjection"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "venue_id": {
+            "format": "uuid",
+            "title": "Venue Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "post_id",
+          "venue_id",
+          "post_type",
+          "body",
+          "publication_status",
+          "author_label"
+        ],
+        "title": "OfficialPostSummary",
+        "type": "object"
+      },
+      "OfficialPostUpload": {
+        "additionalProperties": false,
+        "properties": {
+          "intent_expires_at": {
+            "format": "date-time",
+            "title": "Intent Expires At",
+            "type": "string"
+          },
+          "max_byte_size": {
+            "title": "Max Byte Size",
+            "type": "integer"
+          },
+          "media_asset_id": {
+            "format": "uuid",
+            "title": "Media Asset Id",
+            "type": "string"
+          },
+          "upload": {
+            "$ref": "#/components/schemas/UploadInstruction"
+          },
+          "upload_id": {
+            "format": "uuid",
+            "title": "Upload Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "upload_id",
+          "media_asset_id",
+          "intent_expires_at",
+          "max_byte_size",
+          "upload"
+        ],
+        "title": "OfficialPostUpload",
+        "type": "object"
+      },
       "OnboardingAgeBody": {
         "additionalProperties": false,
         "properties": {
@@ -1165,6 +2021,32 @@
         "title": "ProfilePhotoUploadBody",
         "type": "object"
       },
+      "RecordStoryViewResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "story_id": {
+            "format": "uuid",
+            "title": "Story Id",
+            "type": "string"
+          },
+          "viewed": {
+            "default": true,
+            "title": "Viewed",
+            "type": "boolean"
+          },
+          "viewed_at": {
+            "format": "date-time",
+            "title": "Viewed At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "story_id",
+          "viewed_at"
+        ],
+        "title": "RecordStoryViewResponse",
+        "type": "object"
+      },
       "RefreshBody": {
         "additionalProperties": false,
         "properties": {
@@ -1400,6 +2282,523 @@
         "title": "SimulatorRequest",
         "type": "object"
       },
+      "StoryAuthorProjection": {
+        "additionalProperties": false,
+        "properties": {
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Display Name"
+          },
+          "handle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Handle"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Id"
+          }
+        },
+        "title": "StoryAuthorProjection",
+        "type": "object"
+      },
+      "StoryGroupDetail": {
+        "additionalProperties": false,
+        "properties": {
+          "author_label": {
+            "title": "Author Label",
+            "type": "string"
+          },
+          "group_key": {
+            "title": "Group Key",
+            "type": "string"
+          },
+          "group_type": {
+            "enum": [
+              "venue",
+              "user",
+              "anon"
+            ],
+            "title": "Group Type",
+            "type": "string"
+          },
+          "is_mine": {
+            "default": false,
+            "title": "Is Mine",
+            "type": "boolean"
+          },
+          "is_official": {
+            "default": false,
+            "title": "Is Official",
+            "type": "boolean"
+          },
+          "slides": {
+            "items": {
+              "$ref": "#/components/schemas/StorySlide"
+            },
+            "title": "Slides",
+            "type": "array"
+          },
+          "venue_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Venue Id"
+          }
+        },
+        "required": [
+          "group_key",
+          "group_type",
+          "author_label",
+          "slides"
+        ],
+        "title": "StoryGroupDetail",
+        "type": "object"
+      },
+      "StoryGroupListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/StoryGroupSummary"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "StoryGroupListResponse",
+        "type": "object"
+      },
+      "StoryGroupSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "active_count": {
+            "title": "Active Count",
+            "type": "integer"
+          },
+          "author": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StoryAuthorProjection"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "author_label": {
+            "title": "Author Label",
+            "type": "string"
+          },
+          "earliest_expires_at": {
+            "format": "date-time",
+            "title": "Earliest Expires At",
+            "type": "string"
+          },
+          "group_key": {
+            "title": "Group Key",
+            "type": "string"
+          },
+          "group_type": {
+            "enum": [
+              "venue",
+              "user",
+              "anon"
+            ],
+            "title": "Group Type",
+            "type": "string"
+          },
+          "is_mine": {
+            "default": false,
+            "title": "Is Mine",
+            "type": "boolean"
+          },
+          "is_official": {
+            "default": false,
+            "title": "Is Official",
+            "type": "boolean"
+          },
+          "latest_published_at": {
+            "format": "date-time",
+            "title": "Latest Published At",
+            "type": "string"
+          },
+          "preview_variants": {
+            "items": {
+              "$ref": "#/components/schemas/MediaVariant"
+            },
+            "title": "Preview Variants",
+            "type": "array"
+          },
+          "unviewed_count": {
+            "title": "Unviewed Count",
+            "type": "integer"
+          },
+          "venue": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VenueStoryProjection"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "venue_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Venue Id"
+          }
+        },
+        "required": [
+          "group_key",
+          "group_type",
+          "author_label",
+          "active_count",
+          "unviewed_count",
+          "latest_published_at",
+          "earliest_expires_at"
+        ],
+        "title": "StoryGroupSummary",
+        "type": "object"
+      },
+      "StorySlide": {
+        "additionalProperties": false,
+        "properties": {
+          "attribution_mode": {
+            "enum": [
+              "attributed",
+              "anonymous",
+              "official"
+            ],
+            "title": "Attribution Mode",
+            "type": "string"
+          },
+          "author": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StoryAuthorProjection"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "author_label": {
+            "title": "Author Label",
+            "type": "string"
+          },
+          "can_delete": {
+            "default": false,
+            "title": "Can Delete",
+            "type": "boolean"
+          },
+          "can_report": {
+            "default": false,
+            "title": "Can Report",
+            "type": "boolean"
+          },
+          "caption": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Caption"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "is_mine": {
+            "default": false,
+            "title": "Is Mine",
+            "type": "boolean"
+          },
+          "is_official": {
+            "default": false,
+            "title": "Is Official",
+            "type": "boolean"
+          },
+          "media_type": {
+            "enum": [
+              "image",
+              "video"
+            ],
+            "title": "Media Type",
+            "type": "string"
+          },
+          "published_at": {
+            "format": "date-time",
+            "title": "Published At",
+            "type": "string"
+          },
+          "reply_policy": {
+            "enum": [
+              "disabled",
+              "connections",
+              "everyone"
+            ],
+            "title": "Reply Policy",
+            "type": "string"
+          },
+          "story_id": {
+            "format": "uuid",
+            "title": "Story Id",
+            "type": "string"
+          },
+          "variants": {
+            "items": {
+              "$ref": "#/components/schemas/MediaVariant"
+            },
+            "title": "Variants",
+            "type": "array"
+          },
+          "venue": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VenueStoryProjection"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "venue_id": {
+            "format": "uuid",
+            "title": "Venue Id",
+            "type": "string"
+          },
+          "vibe_tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Vibe Tags",
+            "type": "array"
+          },
+          "viewed": {
+            "default": false,
+            "title": "Viewed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "story_id",
+          "venue_id",
+          "media_type",
+          "attribution_mode",
+          "author_label",
+          "reply_policy",
+          "published_at",
+          "expires_at"
+        ],
+        "title": "StorySlide",
+        "type": "object"
+      },
+      "StoryUploadResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "attribution_mode": {
+            "enum": [
+              "attributed",
+              "anonymous",
+              "official"
+            ],
+            "title": "Attribution Mode",
+            "type": "string"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Expires At"
+          },
+          "failure_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Failure Reason"
+          },
+          "intent_expires_at": {
+            "format": "date-time",
+            "title": "Intent Expires At",
+            "type": "string"
+          },
+          "lifecycle_status": {
+            "enum": [
+              "intent_pending",
+              "uploaded",
+              "validating",
+              "processing",
+              "moderation_pending",
+              "ready",
+              "upload_expired",
+              "invalid",
+              "processing_failed",
+              "rejected",
+              "manual_review",
+              "deleted",
+              "revoked"
+            ],
+            "title": "Lifecycle Status",
+            "type": "string"
+          },
+          "max_byte_size": {
+            "title": "Max Byte Size",
+            "type": "integer"
+          },
+          "media_asset_id": {
+            "format": "uuid",
+            "title": "Media Asset Id",
+            "type": "string"
+          },
+          "moderation_status": {
+            "enum": [
+              "pending",
+              "approved",
+              "rejected",
+              "manual_review",
+              "quarantined"
+            ],
+            "title": "Moderation Status",
+            "type": "string"
+          },
+          "publication_status": {
+            "enum": [
+              "draft",
+              "uploaded",
+              "processing",
+              "moderation_pending",
+              "published",
+              "expired",
+              "hidden",
+              "rejected",
+              "failed",
+              "deleted"
+            ],
+            "title": "Publication Status",
+            "type": "string"
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Published At"
+          },
+          "story_id": {
+            "format": "uuid",
+            "title": "Story Id",
+            "type": "string"
+          },
+          "upload": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UploadInstruction"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "upload_id": {
+            "format": "uuid",
+            "title": "Upload Id",
+            "type": "string"
+          },
+          "variants": {
+            "items": {
+              "$ref": "#/components/schemas/MediaVariant"
+            },
+            "title": "Variants",
+            "type": "array"
+          }
+        },
+        "required": [
+          "story_id",
+          "upload_id",
+          "media_asset_id",
+          "lifecycle_status",
+          "publication_status",
+          "moderation_status",
+          "attribution_mode",
+          "intent_expires_at",
+          "max_byte_size"
+        ],
+        "title": "StoryUploadResponse",
+        "type": "object"
+      },
       "SubmitVenueClaimRequest": {
         "additionalProperties": false,
         "properties": {
@@ -1487,6 +2886,40 @@
         "title": "UpdateMemberRoleRequest",
         "type": "object"
       },
+      "UploadInstruction": {
+        "additionalProperties": false,
+        "properties": {
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "headers": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Headers",
+            "type": "object"
+          },
+          "method": {
+            "const": "PUT",
+            "title": "Method",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "method",
+          "url",
+          "headers",
+          "expires_at"
+        ],
+        "title": "UploadInstruction",
+        "type": "object"
+      },
       "ValidationError": {
         "properties": {
           "ctx": {
@@ -1525,6 +2958,38 @@
           "type"
         ],
         "title": "ValidationError",
+        "type": "object"
+      },
+      "VenueStoryProjection": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Slug"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "VenueStoryProjection",
         "type": "object"
       }
     },
@@ -2939,6 +4404,34 @@
         "summary": "Ack Event",
         "tags": [
           "realtime"
+        ]
+      }
+    },
+    "/v1/experience/stories": {
+      "get": {
+        "operationId": "list_experience_stories_v1_experience_stories_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Experience Stories V1 Experience Stories Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Experience Stories",
+        "tags": [
+          "stories"
         ]
       }
     },
@@ -4462,6 +5955,246 @@
         ]
       }
     },
+    "/v1/official-posts/{post_id}": {
+      "delete": {
+        "operationId": "delete_official_post_route_v1_official_posts__post_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "post_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Post Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Delete Official Post Route V1 Official Posts  Post Id  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete Official Post Route",
+        "tags": [
+          "stories"
+        ]
+      },
+      "get": {
+        "operationId": "get_official_post_v1_official_posts__post_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "post_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Post Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Official Post V1 Official Posts  Post Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Official Post",
+        "tags": [
+          "stories"
+        ]
+      }
+    },
+    "/v1/official-posts/{post_id}/archive": {
+      "post": {
+        "operationId": "archive_official_post_v1_official_posts__post_id__archive_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "post_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Post Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Archive Official Post V1 Official Posts  Post Id  Archive Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Archive Official Post",
+        "tags": [
+          "stories"
+        ]
+      }
+    },
+    "/v1/official-story-uploads/{upload_id}/complete": {
+      "post": {
+        "operationId": "complete_official_story_upload_v1_official_story_uploads__upload_id__complete_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "upload_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Upload Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompleteStoryUploadRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Complete Official Story Upload V1 Official Story Uploads  Upload Id  Complete Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Complete Official Story Upload",
+        "tags": [
+          "stories"
+        ]
+      }
+    },
     "/v1/organization-invitations/{invitation_id}/revoke": {
       "post": {
         "operationId": "revoke_invitation_v1_organization_invitations__invitation_id__revoke_post",
@@ -5258,6 +6991,423 @@
         ]
       }
     },
+    "/v1/stories/uploads": {
+      "post": {
+        "operationId": "create_user_story_upload_v1_stories_uploads_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateUserStoryUploadRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create User Story Upload V1 Stories Uploads Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create User Story Upload",
+        "tags": [
+          "stories"
+        ]
+      }
+    },
+    "/v1/stories/{story_id}": {
+      "delete": {
+        "operationId": "delete_story_v1_stories__story_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "story_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Story Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Delete Story V1 Stories  Story Id  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete Story",
+        "tags": [
+          "stories"
+        ]
+      }
+    },
+    "/v1/stories/{story_id}/reports": {
+      "post": {
+        "operationId": "report_story_v1_stories__story_id__reports_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "story_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Story Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateStoryReportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Report Story V1 Stories  Story Id  Reports Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Report Story",
+        "tags": [
+          "stories"
+        ]
+      }
+    },
+    "/v1/stories/{story_id}/views": {
+      "post": {
+        "operationId": "record_story_view_v1_stories__story_id__views_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "story_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Story Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Record Story View V1 Stories  Story Id  Views Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Record Story View",
+        "tags": [
+          "stories"
+        ]
+      }
+    },
+    "/v1/story-groups/{group_key}": {
+      "get": {
+        "operationId": "get_story_group_v1_story_groups__group_key__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "group_key",
+            "required": true,
+            "schema": {
+              "title": "Group Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Story Group V1 Story Groups  Group Key  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Story Group",
+        "tags": [
+          "stories"
+        ]
+      }
+    },
+    "/v1/story-uploads/{upload_id}": {
+      "get": {
+        "operationId": "get_story_upload_v1_story_uploads__upload_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "upload_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Upload Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Story Upload V1 Story Uploads  Upload Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Story Upload",
+        "tags": [
+          "stories"
+        ]
+      }
+    },
+    "/v1/story-uploads/{upload_id}/complete": {
+      "post": {
+        "operationId": "complete_user_story_upload_v1_story_uploads__upload_id__complete_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "upload_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Upload Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompleteStoryUploadRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Complete User Story Upload V1 Story Uploads  Upload Id  Complete Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Complete User Story Upload",
+        "tags": [
+          "stories"
+        ]
+      }
+    },
     "/v1/users/{user_id}/block": {
       "delete": {
         "operationId": "unblock_user_v1_users__user_id__block_delete",
@@ -5751,6 +7901,222 @@
         "summary": "Update Managed Profile",
         "tags": [
           "organizations"
+        ]
+      }
+    },
+    "/v1/venues/{venue_id}/official-posts": {
+      "get": {
+        "operationId": "list_official_posts_v1_venues__venue_id__official_posts_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "venue_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Venue Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Official Posts V1 Venues  Venue Id  Official Posts Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Official Posts",
+        "tags": [
+          "stories"
+        ]
+      },
+      "post": {
+        "operationId": "create_official_post_v1_venues__venue_id__official_posts_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "venue_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Venue Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateOfficialPostRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create Official Post V1 Venues  Venue Id  Official Posts Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Official Post",
+        "tags": [
+          "stories"
+        ]
+      }
+    },
+    "/v1/venues/{venue_id}/official-stories/uploads": {
+      "post": {
+        "operationId": "create_official_story_upload_v1_venues__venue_id__official_stories_uploads_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "venue_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Venue Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateOfficialStoryUploadRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create Official Story Upload V1 Venues  Venue Id  Official Stories Uploads Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Official Story Upload",
+        "tags": [
+          "stories"
         ]
       }
     },
