@@ -25,6 +25,7 @@ import {
   interpretVerifyResult,
   useVerifyPresence,
 } from "@/features/presence/useVerifyPresence";
+import { OfficialPostsSection } from "@/features/stories/OfficialPostsSection";
 import { VenueDetailSkeleton } from "@/features/venue/VenueDetailSkeleton";
 import {
   VenueDetailErrorState,
@@ -344,6 +345,8 @@ export function VenueDetailScreen({ venueId, distanceM }: Props) {
               </View>
             </InfoCard>
           ) : null}
+
+          <OfficialPostsSection venueId={venueId} venueName={venue.name} />
 
           <InfoCard title="VENUE EXPERIENCE" testID="venue-experience-card">
             <Text style={styles.cardBody}>Category · {category}</Text>

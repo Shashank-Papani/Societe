@@ -15,6 +15,7 @@ import {
 
 import { API_BASE_URL, type ApiEnvelope } from "@/api/client";
 import { clearActiveAuthSubject } from "@/auth/deviceStore";
+import { clearPendingStoryUpload } from "@/features/stories/pendingStoryUpload";
 import {
   clearSessionTokens,
   getAccessToken,
@@ -43,6 +44,10 @@ const PROTECTED_QUERY_PREFIXES = [
   "presence",
   "connect",
   "messages",
+  "vibes",
+  "stories",
+  "story-group",
+  "official-posts",
 ] as const;
 
 let liveAccessToken: string | null = null;
@@ -81,6 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const clearSession = useCallback(async () => {
     await clearSessionTokens();
     await clearActiveAuthSubject();
+    await clearPendingStoryUpload();
     setAccessToken(null);
     setStatus("unauthenticated");
     clearProtectedQueries();

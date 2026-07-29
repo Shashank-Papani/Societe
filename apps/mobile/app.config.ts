@@ -39,6 +39,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   plugins: [
     "expo-router",
+    "expo-video",
     "expo-secure-store",
     "expo-sqlite",
     "expo-dev-client",

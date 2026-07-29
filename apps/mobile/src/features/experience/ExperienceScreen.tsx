@@ -1,9 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as Crypto from "expo-crypto";
 import { Image } from "expo-image";
+import { useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Pressable,
   ScrollView,
@@ -13,6 +15,7 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { ApiError } from "@/api/client";
 import { useAuth } from "@/auth/AuthProvider";
 import {
   completeMediaUpload,
@@ -37,6 +40,13 @@ import {
   type FeedListItem,
 } from "@/features/experience/vibeMedia";
 import { fetchPresenceMe } from "@/features/presence/api";
+import {
+  fetchExperienceStoryGroups,
+  type StoryGroupSummary,
+} from "@/features/stories/api";
+import { StoryComposerModal } from "@/features/stories/StoryComposerModal";
+import { StoryRail } from "@/features/stories/StoryRail";
+import { StoryViewerModal } from "@/features/stories/StoryViewerModal";
 import { tabScreenBottomPadding } from "@/navigation/tabBar";
 import { colors, fontFamilies, radii, spacing } from "@/theme";
 
@@ -97,8 +107,11 @@ function optimisticStatusForPhase(
 
 export function ExperienceScreen() {
   const auth = useAuth();
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
+  const [viewerGroupKey, setViewerGroupKey] = useState<string | null>(null);
+  const [composerOpen, setComposerOpen] = useState(false);
   const bottomPad = tabScreenBottomPadding(insets.bottom);
   const listRef = useRef<FlatList<FeedListItem>>(null);
   const [filter, setFilter] = useState<FeedFilter>("for_you");
@@ -131,6 +144,30 @@ export function ExperienceScreen() {
     enabled: auth.status === "authenticated" && Boolean(venueId),
     refetchInterval: 15_000,
   });
+
+  const storiesQuery = useQuery({
+    queryKey: ["stories", "experience"],
+    queryFn: fetchExperienceStoryGroups,
+    enabled: auth.status === "authenticated",
+    refetchInterval: 30_000,
+    retry: (count, error) => {
+      if (error instanceof ApiError && error.code === "STORIES_DISABLED") {
+        return false;
+      }
+      return count < 2;
+    },
+  });
+
+  const storiesUnavailable =
+    storiesQuery.error instanceof ApiError &&
+    storiesQuery.error.code === "STORIES_DISABLED";
+
+  const storyGroups =
+    auth.status === "authenticated" ? (storiesQuery.data?.items ?? []) : [];
+
+  const applyStoryGroups = (groups: StoryGroupSummary[]) => {
+    queryClient.setQueryData(["stories", "experience"], { items: groups });
+  };
 
   const resetComposer = () => {
     setUploadStatus(null);
@@ -367,17 +404,50 @@ export function ExperienceScreen() {
         ))}
       </ScrollView>
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.storyRow}
-        testID="experience-story-row"
-      >
+      <View testID="experience-story-row">
+        <StoryRail
+          groups={storyGroups}
+          loading={storiesQuery.isLoading || storiesQuery.isFetching}
+          errorMessage={
+            storiesUnavailable
+              ? null
+              : storiesQuery.isError
+                ? "Couldn’t load Stories."
+                : null
+          }
+          canCreate={canPost}
+          venueName={venueName}
+          storiesUnavailable={storiesUnavailable}
+          onRetry={() => {
+            void storiesQuery.refetch();
+          }}
+          onPressYourStory={() => {
+            if (!canPost || !venueId || !venueName) {
+              Alert.alert(
+                "Verified presence required",
+                "Stories can only be posted while you’re verified at a venue.",
+                [
+                  { text: "Not now", style: "cancel" },
+                  {
+                    text: "Go to Presence",
+                    onPress: () => router.push("/(tabs)/presence"),
+                  },
+                ],
+              );
+              return;
+            }
+            setComposerOpen(true);
+          }}
+          onPressGroup={(group) => setViewerGroupKey(group.group_key)}
+        />
+      </View>
+
+      {canPost ? (
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Share a Live Vibe"
           testID="experience-your-story"
-          disabled={!canPost || uploadMutation.isPending}
+          disabled={uploadMutation.isPending}
           onPress={() => {
             void (async () => {
               setPhase("picking");
@@ -398,34 +468,21 @@ export function ExperienceScreen() {
               uploadMutation.mutate(picked.asset);
             })();
           }}
-          style={styles.storyItem}
+          style={styles.liveVibeCta}
         >
-          <View style={[styles.storyRing, styles.storyRingYours]}>
-            <Text style={styles.plus}>+</Text>
-          </View>
-          <Text style={styles.storyLabel}>Your Story</Text>
+          <Text style={styles.liveVibeCtaText}>Share Live Vibe</Text>
+          {venueName ? (
+            <Text style={styles.liveVibeCtaMeta}>at {venueName}</Text>
+          ) : null}
         </Pressable>
-        {venueName ? (
-          <View style={styles.storyItem}>
-            <View style={[styles.storyRing, styles.storyRingVenue]}>
-              <Text style={styles.storyInitial}>{venueName.slice(0, 1)}</Text>
-            </View>
-            <Text style={styles.storyLabel} numberOfLines={1}>
-              {venueName}
-            </Text>
-          </View>
-        ) : null}
-      </ScrollView>
-
-      {!canPost ? (
+      ) : (
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>Verify your presence first</Text>
           <Text style={styles.emptyBody}>
-            You can share a Live Vibe while verified at a venue. Stories and official
-            venue posts require additional product capabilities not yet available.
+            Share Live Vibes and Stories while verified at a venue.
           </Text>
         </View>
-      ) : null}
+      )}
 
       {successBanner ? (
         <View style={styles.successBanner} testID="experience-publish-success">
@@ -498,6 +555,31 @@ export function ExperienceScreen() {
           />
         )}
       />
+
+      <StoryViewerModal
+        visible={auth.status === "authenticated" && Boolean(viewerGroupKey)}
+        groups={storyGroups}
+        initialGroupKey={viewerGroupKey}
+        onClose={() => setViewerGroupKey(null)}
+        onGroupsChange={applyStoryGroups}
+        onDeleted={() => {
+          void queryClient.invalidateQueries({ queryKey: ["stories"] });
+        }}
+      />
+
+      {venueId && venueName ? (
+        <StoryComposerModal
+          visible={composerOpen && auth.status === "authenticated"}
+          venueId={venueId}
+          venueName={venueName}
+          sessionActive={auth.status === "authenticated"}
+          onClose={() => setComposerOpen(false)}
+          onPublished={() => {
+            setComposerOpen(false);
+            void queryClient.invalidateQueries({ queryKey: ["stories"] });
+          }}
+        />
+      ) : null}
     </SafeAreaView>
   );
 }
@@ -601,6 +683,27 @@ const styles = StyleSheet.create({
     color: colors.neon,
     fontFamily: fontFamilies.geistSemiBold,
     fontSize: 13,
+  },
+  liveVibeCta: {
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.sm,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: radii.medium,
+    borderWidth: 1,
+    borderColor: colors.borderMedium,
+    backgroundColor: colors.surfaceElevated,
+    gap: 2,
+  },
+  liveVibeCtaText: {
+    color: colors.neon,
+    fontFamily: fontFamilies.geistSemiBold,
+    fontSize: 13,
+  },
+  liveVibeCtaMeta: {
+    color: colors.textSecondary,
+    fontFamily: fontFamilies.geistRegular,
+    fontSize: 12,
   },
   loader: { marginVertical: spacing.md },
   feed: {
