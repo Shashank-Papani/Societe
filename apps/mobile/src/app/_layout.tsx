@@ -1,11 +1,18 @@
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
-import { Stack, useRouter, useSegments } from "expo-router";
+import { Stack, useRouter, useSegments, type Href } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect, useState } from "react";
 import { StatusBar } from "expo-status-bar";
 
 import { AuthProvider, useAuth } from "@/auth/AuthProvider";
 import { fetchMe } from "@/auth/localAuth";
+import { resolveAuthGateDestination } from "@/features/auth/welcomeContent";
+import { ForegroundNotificationHost } from "@/features/notifications/ForegroundNotificationHost";
+import { ForegroundNotificationProvider } from "@/features/notifications/ForegroundNotificationProvider";
+import { PresenceRetentionProvider } from "@/features/presence/PresenceRetentionProvider";
+// TaskManager definitions must load at app startup.
+import "@/features/presence/backgroundPresenceTask";
+import { useAppFonts } from "@/theme/fonts";
 
 SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
@@ -21,80 +28,62 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   });
 
   useEffect(() => {
-    if (auth.status === "initializing") {
-      return;
+    const destination = resolveAuthGateDestination({
+      status: auth.status,
+      segment0: segments[0],
+      onboardingState: meQuery.data?.onboarding_state,
+      meSuccess: meQuery.isSuccess,
+    });
+    if (destination) {
+      router.replace(destination as Href);
     }
-    const inAuth = segments[0] === "auth";
-    const inOnboarding = segments[0] === "onboarding";
-
-    if (auth.status === "unauthenticated") {
-      if (!inAuth) {
-        router.replace("/auth/email");
-      }
-      return;
-    }
-
-    const state = meQuery.data?.onboarding_state;
-    if (meQuery.isSuccess && state && state !== "completed") {
-      if (!inOnboarding) {
-        router.replace("/onboarding");
-      }
-      return;
-    }
-
-    if (meQuery.isSuccess && state === "completed" && (inAuth || inOnboarding)) {
-      router.replace("/");
-    }
-  }, [auth.status, meQuery.data?.onboarding_state, meQuery.isSuccess, router, segments]);
+  }, [
+    auth.status,
+    meQuery.data?.onboarding_state,
+    meQuery.isSuccess,
+    router,
+    segments,
+  ]);
 
   return <>{children}</>;
 }
 
 export default function RootLayout() {
   const [queryClient] = useState(() => new QueryClient());
+  const [fontsLoaded, fontError] = useAppFonts();
 
   useEffect(() => {
-    SplashScreen.hideAsync().catch(() => undefined);
-  }, []);
+    if (fontsLoaded || fontError) {
+      SplashScreen.hideAsync().catch(() => undefined);
+    }
+  }, [fontsLoaded, fontError]);
+
+  if (!fontsLoaded && !fontError) {
+    return null;
+  }
 
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <AuthGate>
-          <StatusBar style="light" />
-          <Stack screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="(tabs)" />
-            <Stack.Screen name="auth/email" />
-            <Stack.Screen name="auth/otp" />
-            <Stack.Screen name="onboarding" />
-            <Stack.Screen
-              name="venue/[venueId]"
-              options={{
-                headerShown: true,
-                title: "Venue",
-                headerStyle: { backgroundColor: "#0b1220" },
-              }}
-            />
-            <Stack.Screen
-              name="messages/index"
-              options={{
-                headerShown: true,
-                title: "Messages",
-                headerStyle: { backgroundColor: "#0b1220" },
-                headerTintColor: "#f5f7fb",
-              }}
-            />
-            <Stack.Screen
-              name="messages/[conversationId]"
-              options={{
-                headerShown: true,
-                title: "Conversation",
-                headerStyle: { backgroundColor: "#0b1220" },
-                headerTintColor: "#f5f7fb",
-              }}
-            />
-          </Stack>
-        </AuthGate>
+        <PresenceRetentionProvider>
+          <ForegroundNotificationProvider>
+            <AuthGate>
+              <StatusBar style="light" />
+              <Stack screenOptions={{ headerShown: false }}>
+                <Stack.Screen name="(tabs)" />
+                <Stack.Screen name="auth/index" />
+                <Stack.Screen name="auth/email" />
+                <Stack.Screen name="auth/otp" />
+                <Stack.Screen name="onboarding" />
+                <Stack.Screen name="venue" options={{ headerShown: false }} />
+                <Stack.Screen name="messages" options={{ headerShown: false }} />
+                <Stack.Screen name="blocked-users" options={{ headerShown: false }} />
+                <Stack.Screen name="presence-map" options={{ headerShown: false }} />
+              </Stack>
+              <ForegroundNotificationHost />
+            </AuthGate>
+          </ForegroundNotificationProvider>
+        </PresenceRetentionProvider>
       </AuthProvider>
     </QueryClientProvider>
   );

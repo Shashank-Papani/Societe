@@ -67,9 +67,17 @@ class Settings(BaseSettings):
     # Presence — server clock is authoritative. observed_at only gates freshness.
     max_evidence_age_seconds: int = 15
     max_observed_future_skew_seconds: int = 5
-    presence_candidate_radius_m: int = 150
-    verified_lease_seconds: int = 120
-    degraded_grace_seconds: int = 300
+    # Candidate search must cover retention + outside confirmation distances.
+    presence_candidate_radius_m: int = 400
+    # Entry / retention hysteresis (meters). Exact product defaults.
+    presence_entry_radius_meters: float = 160.9344
+    presence_retention_radius_meters: float = 241.4016
+    presence_default_max_accuracy_meters: float = 50.0
+    # Lease + additive grace (not total wall-clock). Max without evidence = lease + grace.
+    verified_lease_seconds: int = 1800
+    degraded_grace_seconds: int = 900
+    presence_outside_confirmations_required: int = 2
+    presence_outside_confirmation_delay_seconds: int = 90
     evidence_idempotency_ttl_seconds: int = 900
     location_rate_limit_per_user_per_minute: int = 20
     location_rate_limit_per_device_per_minute: int = 20
@@ -204,8 +212,24 @@ class Settings(BaseSettings):
                 f"DEFAULT_PURGE_TIMEZONE {self.default_purge_timezone!r} is not a valid IANA zone."
             )
             raise ValueError(msg) from exc
-        if self.degraded_grace_seconds < self.verified_lease_seconds:
-            msg = "DEGRADED_GRACE_SECONDS must be >= VERIFIED_LEASE_SECONDS."
+        # Grace is additive after lease expiry (lease + grace = max without evidence).
+        if self.degraded_grace_seconds <= 0:
+            msg = "DEGRADED_GRACE_SECONDS must be greater than zero."
+            raise ValueError(msg)
+        if self.presence_entry_radius_meters <= 0:
+            msg = "PRESENCE_ENTRY_RADIUS_METERS must be greater than zero."
+            raise ValueError(msg)
+        if self.presence_retention_radius_meters < self.presence_entry_radius_meters:
+            msg = (
+                "PRESENCE_RETENTION_RADIUS_METERS must be >= PRESENCE_ENTRY_RADIUS_METERS "
+                "(hysteresis)."
+            )
+            raise ValueError(msg)
+        if self.presence_outside_confirmations_required < 2:
+            msg = "PRESENCE_OUTSIDE_CONFIRMATIONS_REQUIRED must be >= 2."
+            raise ValueError(msg)
+        if not (60 <= self.presence_outside_confirmation_delay_seconds <= 120):
+            msg = "PRESENCE_OUTSIDE_CONFIRMATION_DELAY_SECONDS must be between 60 and 120."
             raise ValueError(msg)
         for name, value in (
             ("MAX_EVIDENCE_AGE_SECONDS", self.max_evidence_age_seconds),

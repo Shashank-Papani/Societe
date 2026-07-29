@@ -68,7 +68,9 @@ async def list_blocked_users(
     ctx: Annotated[CurrentUserContext, Depends(get_current_user)],
 ) -> dict[str, Any]:
     data = await _service(session, settings).list_blocked_users(user=ctx.user)
-    return success_response(data, meta=_meta(request)).model_dump(mode="json")
+    return success_response(data.model_dump(mode="json"), meta=_meta(request)).model_dump(
+        mode="json"
+    )
 
 
 @router.post("/calling-cards")

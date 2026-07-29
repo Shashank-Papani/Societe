@@ -40,10 +40,13 @@ const callingCardSummarySchema = z.object({
   recipient_user_id: z.string(),
   reason_code: z.string().nullable().optional(),
   reason_text: z.string().nullable().optional(),
+  custom_message: z.string().nullable().optional(),
   created_at: z.string(),
   expires_at: z.string(),
   responded_at: z.string().nullable().optional(),
   response_action: responseActionSchema.nullable().optional(),
+  // Omitted on older API builds; treat missing as unknown (still show accepted).
+  has_active_grant: z.boolean().optional(),
 });
 
 const callingCardCreateSchema = z.object({
@@ -61,7 +64,7 @@ const connectionGrantSchema = z.object({
   id: z.string(),
   calling_card_id: z.string(),
   scopes: z.array(z.string()),
-  expires_at: z.string(),
+  expires_at: z.string().nullable().optional(),
   revoked_at: z.string().nullable().optional(),
 });
 
@@ -94,12 +97,25 @@ const unblockResponseSchema = z.object({
   removed: z.boolean(),
 });
 
+const blockedUserSchema = z.object({
+  user_id: z.string(),
+  handle: z.string(),
+  display_name: z.string(),
+  blocked_at: z.string(),
+  profile_photo_url: z.string().nullable().optional(),
+});
+
+const blockedUsersSchema = z.object({
+  blocked_users: z.array(blockedUserSchema),
+});
+
 export type DiscoverableUser = z.infer<typeof discoverableUserSchema>;
 export type CallingCardSummary = z.infer<typeof callingCardSummarySchema>;
 export type CallingCardCreateResult = z.infer<typeof callingCardCreateSchema>;
 export type CallingCardStatus = z.infer<typeof callingCardStatusSchema>;
 export type ShareScope = z.infer<typeof shareScopeSchema>;
 export type ResponseDecision = "accept" | "decline";
+export type BlockedUser = z.infer<typeof blockedUserSchema>;
 
 export const CALLING_CARD_REASON_CODES = [
   "love_the_dance_moves",
@@ -127,6 +143,7 @@ export async function createCallingCard(
     recipientUserId: string;
     reasonCode?: string | null;
     reasonText?: string | null;
+    customMessage?: string | null;
   },
   idempotencyKey: string = newIdempotencyKey(),
 ) {
@@ -139,6 +156,7 @@ export async function createCallingCard(
         recipient_user_id: input.recipientUserId,
         reason_code: input.reasonCode ?? null,
         reason_text: input.reasonText ?? null,
+        custom_message: input.customMessage ?? null,
       }),
     },
   );
@@ -243,4 +261,11 @@ export async function unblockUser(userId: string) {
     { method: "DELETE" },
   );
   return unblockResponseSchema.parse(envelope.data);
+}
+
+export async function fetchBlockedUsers() {
+  const envelope = await apiFetch<z.infer<typeof blockedUsersSchema>>(
+    "/v1/me/blocked-users",
+  );
+  return blockedUsersSchema.parse(envelope.data).blocked_users;
 }

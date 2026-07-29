@@ -159,10 +159,12 @@ async def test_idempotency_duplicate(world: CallingCardWorld) -> None:
 
 
 async def test_one_pending_per_pair(world: CallingCardWorld) -> None:
-    await _create(world)
-    with pytest.raises(AppError) as exc:
-        await _create(world)
-    assert exc.value.code == "CALLING_CARD_PENDING_EXISTS"
+    first = await _create(world)
+    # A second create with a different idempotency key must reconcile to the
+    # same active pending card rather than inserting a duplicate.
+    second = await _create(world)
+    assert first.id == second.id
+    assert second.status == "pending"
 
 
 async def test_decline_cooldown(world: CallingCardWorld) -> None:

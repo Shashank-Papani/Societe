@@ -59,6 +59,9 @@ class Venue(Base):
     exit_dwell_seconds: Mapped[int] = mapped_column(Integer, nullable=False, server_default="30")
     entry_buffer_m: Mapped[float] = mapped_column(nullable=False, server_default=text("10"))
     exit_buffer_m: Mapped[float] = mapped_column(nullable=False, server_default=text("25"))
+    # Optional overrides for presence entry/retention hysteresis (meters).
+    entry_radius_m: Mapped[float | None] = mapped_column()
+    retention_radius_m: Mapped[float | None] = mapped_column()
     supports_qr_proof: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     supports_ble_proof: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="false"

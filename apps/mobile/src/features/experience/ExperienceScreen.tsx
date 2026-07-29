@@ -1,15 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import * as Crypto from "expo-crypto";
 import { Image } from "expo-image";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  FlatList,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useAuth } from "@/auth/AuthProvider";
 import {
@@ -17,10 +19,9 @@ import {
   createMediaUpload,
   fetchUploadStatus,
   fetchVenueVibes,
-  reportVibe,
   type UploadStatus,
-  type VibeFeedItem,
 } from "@/features/experience/api";
+import { LiveVibeCard } from "@/features/experience/LiveVibeCard";
 import {
   loadDevFixtureJpeg,
   mapLifecycleToPhase,
@@ -29,7 +30,15 @@ import {
   type SelectedMediaAsset,
   type UploadPhase,
 } from "@/features/experience/uploadHelpers";
+import { resolveVibeDisplayState } from "@/features/experience/vibeLifecycle";
+import {
+  composerShouldShow,
+  reconcileVibeFeed,
+  type FeedListItem,
+} from "@/features/experience/vibeMedia";
 import { fetchPresenceMe } from "@/features/presence/api";
+import { tabScreenBottomPadding } from "@/navigation/tabBar";
+import { colors, fontFamilies, radii, spacing } from "@/theme";
 
 const TERMINAL = new Set([
   "ready",
@@ -41,48 +50,69 @@ const TERMINAL = new Set([
   "deleted",
 ]);
 
+type FeedFilter = "for_you" | "nearby" | "live_now";
+
 function phaseLabel(phase: UploadPhase): string {
   switch (phase) {
     case "idle":
-      return "Ready";
+      return "Ready to share";
     case "picking":
       return "Opening photo library…";
     case "permission_denied":
       return "Photo library permission denied";
     case "cancelled":
       return "Selection cancelled";
-    case "validating":
-      return "Validating selected image…";
     case "creating_intent":
-      return "Creating upload intent…";
+      return "Creating upload…";
     case "uploading":
-      return "Uploading to storage…";
+      return "Uploading…";
     case "completing":
-      return "Confirming upload…";
+      return "Confirming…";
     case "processing":
-      return "Processing and moderating…";
+      return "Processing…";
     case "published":
-      return "Published to the venue feed";
+      return "Published";
     case "rejected":
-      return "Rejected by validation or moderation";
+      return "Rejected";
     case "failed_retryable":
-      return "Failed — you can retry";
+      return "Couldn’t process";
     case "failed_permanent":
-      return "Failed";
+      return "Couldn’t process";
     default:
       return phase;
   }
 }
 
+function optimisticStatusForPhase(
+  phase: UploadPhase,
+): "uploading" | "processing" | "under_review" {
+  if (phase === "uploading" || phase === "creating_intent" || phase === "completing") {
+    return "uploading";
+  }
+  if (phase === "processing") {
+    return "processing";
+  }
+  return "under_review";
+}
+
 export function ExperienceScreen() {
   const auth = useAuth();
+  const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
-  const [caption, setCaption] = useState("");
+  const bottomPad = tabScreenBottomPadding(insets.bottom);
+  const listRef = useRef<FlatList<FeedListItem>>(null);
+  const [filter, setFilter] = useState<FeedFilter>("for_you");
   const [uploadStatus, setUploadStatus] = useState<UploadStatus | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [phase, setPhase] = useState<UploadPhase>("idle");
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [previewUri, setPreviewUri] = useState<string | null>(null);
+  const [caption, setCaption] = useState("");
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [clientRequestId, setClientRequestId] = useState<string | null>(null);
+  const [optimisticLiveVibeId, setOptimisticLiveVibeId] = useState<string | null>(null);
+  const [successBanner, setSuccessBanner] = useState<string | null>(null);
+  const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const presenceQuery = useQuery({
     queryKey: ["presence", "me"],
@@ -102,9 +132,27 @@ export function ExperienceScreen() {
     refetchInterval: 15_000,
   });
 
+  const resetComposer = () => {
+    setUploadStatus(null);
+    setUploadError(null);
+    setPhase("idle");
+    setUploadProgress(null);
+    setPreviewUri(null);
+    setCaption("");
+    setSelectedTags([]);
+    setClientRequestId(null);
+    setOptimisticLiveVibeId(null);
+  };
+
   useEffect(() => {
-    // Phase is updated at mutation call sites and inside the poll callback.
-    // Avoid syncing phase via setState in this effect (react-hooks/set-state-in-effect).
+    return () => {
+      if (resetTimerRef.current) {
+        clearTimeout(resetTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     if (!uploadStatus || TERMINAL.has(uploadStatus.lifecycle_status)) {
       return;
     }
@@ -112,332 +160,464 @@ export function ExperienceScreen() {
       void fetchUploadStatus(uploadStatus.upload_id)
         .then((next) => {
           setUploadStatus(next);
+          if (next.live_vibe_id) {
+            setOptimisticLiveVibeId(next.live_vibe_id);
+          }
           const nextPhase = mapLifecycleToPhase(
             next.lifecycle_status,
-            next.publication_status,
+            next.moderation_status,
           );
           setPhase(nextPhase);
-          if (nextPhase === "published") {
-            void queryClient.invalidateQueries({ queryKey: ["vibes", venueId] });
+          if (next.lifecycle_status === "ready") {
+            setUploadProgress(null);
+            // Refresh Live Vibe surfaces only — never identity/cover media.
+            void Promise.all([
+              queryClient.invalidateQueries({ queryKey: ["vibes", venueId] }),
+              queryClient.invalidateQueries({
+                queryKey: ["venue", venueId, "vibes-preview"],
+              }),
+            ]).then(() => {
+              setSuccessBanner("Live Vibe published");
+              if (resetTimerRef.current) {
+                clearTimeout(resetTimerRef.current);
+              }
+              resetTimerRef.current = setTimeout(() => {
+                setSuccessBanner(null);
+                resetComposer();
+              }, 1800);
+            });
           }
         })
-        .catch((error: Error) => {
-          setUploadError(error.message);
-          setPhase("failed_retryable");
-        });
-    }, 2_500);
+        .catch(() => undefined);
+    }, 2000);
     return () => clearInterval(timer);
-  }, [uploadStatus, venueId, queryClient]);
+  }, [uploadStatus, queryClient, venueId]);
 
-  const runUpload = async (asset: SelectedMediaAsset) => {
-    if (!venueId) {
-      throw new Error("Verify presence at a venue before posting.");
-    }
-    setPreviewUri(asset.uri);
-    setUploadError(null);
-    setUploadProgress(null);
-    setPhase("creating_intent");
-
-    const intent = await createMediaUpload({
-      venueId,
-      mediaType: asset.mediaType,
-      mimeType: asset.mimeType,
-      byteSize: asset.byteSize,
-      caption: caption.trim() || undefined,
-    });
-
-    setPhase("uploading");
-    await uploadFileViaFileSystem({
-      uploadUrl: intent.upload.url,
-      fileUri: asset.uri,
-      headers: intent.upload.headers,
-      onProgress: (fraction) => setUploadProgress(fraction),
-    });
-
-    setPhase("completing");
-    const status = await completeMediaUpload(intent.upload_id);
-    setUploadStatus(status);
-    setPhase(mapLifecycleToPhase(status.lifecycle_status, status.publication_status));
-    setCaption("");
-    return status;
-  };
-
-  const galleryMutation = useMutation({
-    mutationFn: async () => {
-      if (!canPost || !venueId) {
-        throw new Error("Verify presence at a venue before posting.");
-      }
-      setPhase("picking");
+  const uploadMutation = useMutation({
+    mutationFn: async (asset: SelectedMediaAsset) => {
+      const requestId = Crypto.randomUUID();
+      setClientRequestId(requestId);
+      setOptimisticLiveVibeId(null);
       setUploadError(null);
-      const picked = await pickImageFromLibrary();
-      if (picked.status === "permission_denied") {
-        setPhase("permission_denied");
-        throw new Error("Photo library permission is required to post a Live Vibe.");
+      setSuccessBanner(null);
+      setPhase("creating_intent");
+      setPreviewUri(asset.uri);
+      setUploadProgress(null);
+      const intent = await createMediaUpload({
+        venueId: String(venueId),
+        mediaType: "image",
+        mimeType: asset.mimeType,
+        byteSize: asset.byteSize,
+        caption: caption.trim() || undefined,
+        vibeTags: selectedTags,
+      });
+      setOptimisticLiveVibeId(intent.live_vibe_id);
+      setPhase("uploading");
+      setUploadProgress(0);
+      await uploadFileViaFileSystem({
+        uploadUrl: intent.upload.url,
+        headers: intent.upload.headers,
+        fileUri: asset.uri,
+        onProgress: setUploadProgress,
+      });
+      setUploadProgress(null);
+      setPhase("completing");
+      await completeMediaUpload(intent.upload_id);
+      const status = await fetchUploadStatus(intent.upload_id);
+      setUploadStatus(status);
+      if (status.live_vibe_id) {
+        setOptimisticLiveVibeId(status.live_vibe_id);
       }
-      if (picked.status === "cancelled") {
-        setPhase("cancelled");
-        throw new Error("CANCELLED");
+      const nextPhase = mapLifecycleToPhase(status.lifecycle_status, status.moderation_status);
+      setPhase(nextPhase);
+      if (status.lifecycle_status === "ready") {
+        void Promise.all([
+          queryClient.invalidateQueries({ queryKey: ["vibes", venueId] }),
+          queryClient.invalidateQueries({
+            queryKey: ["venue", venueId, "vibes-preview"],
+          }),
+        ]).then(() => {
+          setSuccessBanner("Live Vibe published");
+          if (resetTimerRef.current) {
+            clearTimeout(resetTimerRef.current);
+          }
+          resetTimerRef.current = setTimeout(() => {
+            setSuccessBanner(null);
+            resetComposer();
+          }, 1800);
+        });
       }
-      if (picked.status === "invalid") {
-        setPhase("failed_permanent");
-        throw new Error(picked.message);
-      }
-      setPhase("validating");
-      return runUpload(picked.asset);
+      return status;
     },
     onError: (error: Error) => {
-      if (error.message === "CANCELLED") {
-        setUploadError(null);
-        return;
-      }
-      setUploadError(error.message);
-      if (phase !== "permission_denied" && phase !== "cancelled") {
-        setPhase("failed_retryable");
-      }
-    },
-  });
-
-  const fixtureMutation = useMutation({
-    mutationFn: async () => {
-      if (!canPost || !venueId) {
-        throw new Error("Verify presence at a venue before posting.");
-      }
-      setPhase("validating");
-      const asset = await loadDevFixtureJpeg();
-      return runUpload(asset);
-    },
-    onError: (error: Error) => {
-      setUploadError(error.message);
       setPhase("failed_retryable");
+      setUploadProgress(null);
+      setUploadError(error.message);
     },
   });
 
-  const reportMutation = useMutation({
-    mutationFn: (vibeId: string) => reportVibe(vibeId, "other"),
-  });
+  const optimisticRows = useMemo<FeedListItem[]>(() => {
+    if (!clientRequestId || !previewUri) {
+      return [];
+    }
+    if (phase === "idle" || phase === "published" || phase === "cancelled") {
+      return [];
+    }
+    if (
+      phase === "failed_retryable" ||
+      phase === "failed_permanent" ||
+      phase === "rejected" ||
+      phase === "permission_denied"
+    ) {
+      return [];
+    }
+    const now = new Date();
+    return [
+      {
+        kind: "optimistic",
+        id: `optimistic:${clientRequestId}`,
+        clientRequestId,
+        liveVibeId: optimisticLiveVibeId,
+        localUri: previewUri,
+        caption: caption.trim() || null,
+        vibeTags: selectedTags,
+        authorLabel: "You",
+        publishedAt: now.toISOString(),
+        expiresAt: new Date(now.getTime() + 12 * 60 * 60 * 1000).toISOString(),
+        status: optimisticStatusForPhase(phase),
+      },
+    ];
+  }, [
+    caption,
+    clientRequestId,
+    optimisticLiveVibeId,
+    phase,
+    previewUri,
+    selectedTags,
+  ]);
 
-  const busy = galleryMutation.isPending || fixtureMutation.isPending;
-  const showRetry =
-    phase === "failed_retryable" || phase === "rejected" || phase === "failed_permanent";
+  const serverItems = useMemo(() => {
+    const items = feedQuery.data?.items ?? [];
+    return items.filter((item) => {
+      const state = resolveVibeDisplayState({
+        publishedAt: item.published_at,
+        expiresAt: item.expires_at,
+      });
+      if (filter === "live_now") {
+        return state === "LIVE";
+      }
+      return state !== "ARCHIVED";
+    });
+  }, [feedQuery.data?.items, filter]);
 
-  return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.brand}>Société</Text>
-      <Text style={styles.title}>Experience</Text>
-      <Text style={styles.subtitle}>Live Vibes at your verified venue</Text>
+  const feedRows = useMemo(
+    () => reconcileVibeFeed({ serverItems, optimistic: optimisticRows }),
+    [optimisticRows, serverItems],
+  );
 
-      {auth.status === "initializing" || presenceQuery.isLoading ? (
-        <ActivityIndicator color="#9aa6bf" />
-      ) : null}
-      {auth.status === "unauthenticated" ? (
-        <Text style={styles.help}>Sign in on Profile, then verify presence to post.</Text>
-      ) : null}
+  const showComposerChrome =
+    canPost &&
+    !successBanner &&
+    phase !== "idle" &&
+    phase !== "published" &&
+    phase !== "cancelled" &&
+    (composerShouldShow(phase) ||
+      Boolean(uploadError) ||
+      Boolean(previewUri) ||
+      phase === "failed_retryable" ||
+      phase === "failed_permanent" ||
+      phase === "rejected" ||
+      phase === "permission_denied");
 
-      {presenceQuery.data ? (
-        <View style={styles.card}>
-          <Text style={styles.meta}>Presence: {presenceQuery.data.state}</Text>
-          <Text style={styles.meta}>Venue: {venueName ?? "none"}</Text>
-        </View>
-      ) : null}
+  const showUploadPercent = phase === "uploading" && uploadProgress != null;
 
-      {canPost ? (
-        <View style={styles.card}>
-          <Text style={styles.section}>Post a Live Vibe</Text>
-          <Text style={styles.help}>
-            Choose a photo from your library. The server validates size, type,
-            presence, and moderation before the vibe appears in the feed.
-          </Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Caption (optional)"
-            placeholderTextColor="#6f7c99"
-            value={caption}
-            onChangeText={setCaption}
-            maxLength={300}
-            editable={!busy}
-          />
-          {previewUri ? (
-            <Image source={{ uri: previewUri }} style={styles.localPreview} contentFit="cover" />
-          ) : null}
+  const listHeader = (
+    <View testID="experience-list-header">
+      <View style={styles.header}>
+        <Text style={styles.title} accessibilityRole="header">
+          Experience
+        </Text>
+        <Text style={styles.support}>See the night as it happens.</Text>
+      </View>
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.filters}
+        testID="experience-filters"
+      >
+        {(
+          [
+            ["for_you", "For You"],
+            ["nearby", "Nearby"],
+            ["live_now", "Live Now"],
+          ] as const
+        ).map(([key, label]) => (
           <Pressable
-            style={[styles.button, busy && styles.buttonDisabled]}
-            disabled={busy}
-            onPress={() => galleryMutation.mutate()}
+            key={key}
+            accessibilityRole="button"
+            accessibilityState={{ selected: filter === key }}
+            onPress={() => setFilter(key)}
+            style={[styles.pill, filter === key && styles.pillActive]}
           >
-            <Text style={styles.buttonText}>
-              {busy && phase === "picking" ? "Opening library…" : "Choose from library"}
+            <Text style={[styles.pillText, filter === key && styles.pillTextActive]}>
+              {label}
             </Text>
           </Pressable>
-          {showRetry ? (
-            <Pressable
-              style={[styles.buttonSecondary, busy && styles.buttonDisabled]}
-              disabled={busy}
-              onPress={() => galleryMutation.mutate()}
-            >
-              <Text style={styles.buttonSecondaryText}>Retry upload</Text>
-            </Pressable>
+        ))}
+      </ScrollView>
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.storyRow}
+        testID="experience-story-row"
+      >
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Share a Live Vibe"
+          testID="experience-your-story"
+          disabled={!canPost || uploadMutation.isPending}
+          onPress={() => {
+            void (async () => {
+              setPhase("picking");
+              const picked = await pickImageFromLibrary();
+              if (picked.status === "cancelled") {
+                setPhase("cancelled");
+                return;
+              }
+              if (picked.status === "permission_denied") {
+                setPhase("permission_denied");
+                return;
+              }
+              if (picked.status === "invalid") {
+                setPhase("failed_permanent");
+                setUploadError(picked.message);
+                return;
+              }
+              uploadMutation.mutate(picked.asset);
+            })();
+          }}
+          style={styles.storyItem}
+        >
+          <View style={[styles.storyRing, styles.storyRingYours]}>
+            <Text style={styles.plus}>+</Text>
+          </View>
+          <Text style={styles.storyLabel}>Your Story</Text>
+        </Pressable>
+        {venueName ? (
+          <View style={styles.storyItem}>
+            <View style={[styles.storyRing, styles.storyRingVenue]}>
+              <Text style={styles.storyInitial}>{venueName.slice(0, 1)}</Text>
+            </View>
+            <Text style={styles.storyLabel} numberOfLines={1}>
+              {venueName}
+            </Text>
+          </View>
+        ) : null}
+      </ScrollView>
+
+      {!canPost ? (
+        <View style={styles.empty}>
+          <Text style={styles.emptyTitle}>Verify your presence first</Text>
+          <Text style={styles.emptyBody}>
+            You can share a Live Vibe while verified at a venue. Stories and official
+            venue posts require additional product capabilities not yet available.
+          </Text>
+        </View>
+      ) : null}
+
+      {successBanner ? (
+        <View style={styles.successBanner} testID="experience-publish-success">
+          <Text style={styles.successText}>{successBanner}</Text>
+        </View>
+      ) : null}
+
+      {showComposerChrome ? (
+        <View style={styles.composerStatus} testID="experience-composer-status">
+          <Text style={styles.composerMeta}>
+            Sharing to {venueName} · {phaseLabel(phase)}
+            {showUploadPercent ? ` · ${Math.round((uploadProgress ?? 0) * 100)}%` : ""}
+          </Text>
+          {previewUri ? (
+            <Image
+              source={{ uri: previewUri }}
+              style={styles.preview}
+              contentFit="cover"
+              testID="experience-composer-preview"
+            />
           ) : null}
+          {uploadError ? <Text style={styles.error}>{uploadError}</Text> : null}
           {__DEV__ ? (
             <Pressable
-              style={[styles.buttonSecondary, busy && styles.buttonDisabled]}
-              disabled={busy}
-              onPress={() => fixtureMutation.mutate()}
+              accessibilityRole="button"
+              accessibilityLabel="Use development fixture image"
+              testID="experience-dev-fixture"
+              onPress={() => {
+                void loadDevFixtureJpeg().then((asset) => uploadMutation.mutate(asset));
+              }}
             >
-              <Text style={styles.buttonSecondaryText}>
-                Dev only: upload bundled fixture JPEG
-              </Text>
+              <Text style={styles.devLink}>Use fixture image</Text>
             </Pressable>
           ) : null}
         </View>
-      ) : (
-        <Text style={styles.help}>
-          Verify at a venue on the Presence tab to unlock posting. You can still
-          browse a venue feed from Discover without being there.
-        </Text>
-      )}
-
-      {phase !== "idle" ? (
-        <View style={styles.card}>
-          <Text style={styles.section}>Status</Text>
-          <Text style={styles.meta}>{phaseLabel(phase)}</Text>
-          {uploadProgress != null && phase === "uploading" ? (
-            <Text style={styles.meta}>
-              Upload progress: {Math.round(uploadProgress * 100)}%
-            </Text>
-          ) : null}
-          {busy ? <ActivityIndicator color="#9aa6bf" style={{ marginTop: 8 }} /> : null}
-        </View>
       ) : null}
 
-      {uploadError ? <Text style={styles.error}>{uploadError}</Text> : null}
-      {uploadStatus ? (
-        <View style={styles.card}>
-          <Text style={styles.section}>Server status</Text>
-          <Text style={styles.meta}>lifecycle: {uploadStatus.lifecycle_status}</Text>
-          <Text style={styles.meta}>moderation: {uploadStatus.moderation_status}</Text>
-          <Text style={styles.meta}>
-            publication: {uploadStatus.publication_status ?? "—"}
-          </Text>
-          {uploadStatus.failure_reason ? (
-            <Text style={styles.error}>{uploadStatus.failure_reason}</Text>
-          ) : null}
-        </View>
-      ) : null}
-
-      <Text style={styles.section}>Venue feed{venueName ? ` · ${venueName}` : ""}</Text>
-      {!venueId ? (
-        <Text style={styles.help}>No current venue — open a venue from Discover to browse.</Text>
-      ) : null}
-      {feedQuery.isLoading ? <ActivityIndicator color="#9aa6bf" /> : null}
-      {feedQuery.error ? (
-        <Text style={styles.error}>{(feedQuery.error as Error).message}</Text>
-      ) : null}
-      {(feedQuery.data?.items ?? []).map((item) => (
-        <VibeRow
-          key={item.id}
-          item={item}
-          onReport={() => reportMutation.mutate(item.id)}
-          reporting={reportMutation.isPending}
-        />
-      ))}
-      {venueId && feedQuery.data?.items.length === 0 ? (
-        <Text style={styles.help}>No published Live Vibes yet.</Text>
-      ) : null}
-    </ScrollView>
-  );
-}
-
-function VibeRow({
-  item,
-  onReport,
-  reporting,
-}: {
-  item: VibeFeedItem;
-  onReport: () => void;
-  reporting: boolean;
-}) {
-  const preview =
-    item.variants.find((v) => v.variant_type === "image_720" || v.variant_type === "thumbnail") ??
-    item.variants.find((v) => v.variant_type === "video_poster") ??
-    item.variants[0];
-
-  return (
-    <View style={styles.vibe}>
-      {preview ? (
-        <Image source={{ uri: preview.url }} style={styles.preview} contentFit="cover" />
-      ) : (
-        <View style={[styles.preview, styles.previewEmpty]}>
-          <Text style={styles.meta}>{item.media_type}</Text>
-        </View>
-      )}
-      <Text style={styles.author}>{item.author_label}</Text>
-      {item.caption ? <Text style={styles.caption}>{item.caption}</Text> : null}
-      <Text style={styles.meta}>
-        {item.attribution_mode}
-        {item.viewer_is_author ? " · you" : ""}
-      </Text>
-      {!item.viewer_is_author ? (
-        <Pressable style={styles.report} onPress={onReport} disabled={reporting}>
-          <Text style={styles.reportText}>Report</Text>
-        </Pressable>
+      {feedQuery.isLoading ? (
+        <ActivityIndicator color={colors.lime} style={styles.loader} />
       ) : null}
     </View>
+  );
+
+  return (
+    <SafeAreaView style={styles.safe} edges={["top", "left", "right"]} testID="experience-screen">
+      <FlatList
+        ref={listRef}
+        style={styles.list}
+        data={feedRows}
+        keyExtractor={(item) => item.id}
+        ListHeaderComponent={listHeader}
+        contentContainerStyle={[styles.feed, { paddingBottom: bottomPad }]}
+        ItemSeparatorComponent={() => <View style={styles.separator} />}
+        ListEmptyComponent={
+          !feedQuery.isLoading && canPost ? (
+            <View style={styles.empty}>
+              <Text style={styles.emptyTitle}>The night hasn’t started yet</Text>
+              <Text style={styles.emptyBody}>
+                Live Vibes from nearby venues will appear here once people share.
+              </Text>
+            </View>
+          ) : null
+        }
+        renderItem={({ item }) => (
+          <LiveVibeCard
+            row={item}
+            onRetryMedia={() => {
+              void feedQuery.refetch();
+            }}
+          />
+        )}
+      />
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#0b1220" },
-  content: { padding: 20, gap: 12, paddingBottom: 64 },
-  brand: { color: "#f5f7fb", fontSize: 28, fontWeight: "700", letterSpacing: 0.4 },
-  title: { color: "#f5f7fb", fontSize: 22, fontWeight: "600" },
-  subtitle: { color: "#9aa6bf", marginBottom: 8 },
-  section: { color: "#f5f7fb", fontSize: 16, fontWeight: "600", marginTop: 8 },
-  help: { color: "#9aa6bf", lineHeight: 20 },
-  error: { color: "#f87171" },
-  card: {
+  safe: { flex: 1, backgroundColor: colors.backgroundPrimary },
+  list: { flex: 1 },
+  header: { paddingHorizontal: spacing.lg, paddingTop: spacing.xs, gap: 4 },
+  title: {
+    color: colors.textPrimary,
+    fontFamily: fontFamilies.instrumentSerif,
+    fontSize: 36,
+  },
+  support: {
+    color: colors.textSecondary,
+    fontFamily: fontFamilies.geistRegular,
+    fontSize: 14,
+  },
+  filters: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    gap: spacing.xs,
+  },
+  pill: {
+    minHeight: 36,
+    paddingHorizontal: 14,
+    borderRadius: radii.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.borderSubtle,
+    backgroundColor: colors.surfaceSolid,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pillActive: { backgroundColor: colors.neon, borderColor: colors.neon },
+  pillText: {
+    color: colors.textSecondary,
+    fontFamily: fontFamilies.geistSemiBold,
+    fontSize: 12,
+  },
+  pillTextActive: { color: colors.neonText },
+  storyRow: {
+    paddingHorizontal: spacing.lg,
+    gap: spacing.md,
+    paddingBottom: spacing.sm,
+  },
+  storyItem: { width: 72, alignItems: "center", gap: 6 },
+  storyRing: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    borderWidth: 2,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surfaceElevated,
+  },
+  storyRingYours: { borderColor: colors.neon },
+  storyRingVenue: { borderColor: colors.gold },
+  plus: {
+    color: colors.neon,
+    fontFamily: fontFamilies.geistBold,
+    fontSize: 28,
+    marginTop: -2,
+  },
+  storyInitial: {
+    color: colors.textPrimary,
+    fontFamily: fontFamilies.instrumentSerif,
+    fontSize: 22,
+  },
+  storyLabel: {
+    color: colors.textSecondary,
+    fontFamily: fontFamilies.geistMedium,
+    fontSize: 10,
+    textAlign: "center",
+  },
+  composerStatus: {
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.sm,
     gap: 8,
-    padding: 14,
+  },
+  composerMeta: {
+    color: colors.textSecondary,
+    fontFamily: fontFamilies.geistRegular,
+    fontSize: 12,
+  },
+  preview: { width: 96, height: 96, borderRadius: radii.medium },
+  error: { color: colors.danger, fontFamily: fontFamilies.geistRegular, fontSize: 12 },
+  devLink: { color: colors.gold, fontFamily: fontFamilies.geistMedium, fontSize: 12 },
+  successBanner: {
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.sm,
+    minHeight: 40,
     borderRadius: 12,
-    backgroundColor: "#121a2b",
-    borderColor: "#1e293b",
     borderWidth: 1,
-  },
-  meta: { color: "#9aa6bf", fontSize: 13 },
-  input: {
-    borderWidth: 1,
-    borderColor: "#1e293b",
-    borderRadius: 10,
+    borderColor: "rgba(185,249,8,0.35)",
+    backgroundColor: "rgba(185,249,8,0.08)",
+    alignItems: "center",
+    justifyContent: "center",
     paddingHorizontal: 12,
-    paddingVertical: 10,
-    color: "#f5f7fb",
   },
-  button: {
-    backgroundColor: "#2563eb",
-    borderRadius: 10,
-    paddingVertical: 12,
-    alignItems: "center",
+  successText: {
+    color: colors.neon,
+    fontFamily: fontFamilies.geistSemiBold,
+    fontSize: 13,
   },
-  buttonSecondary: {
-    borderRadius: 10,
-    paddingVertical: 12,
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#334155",
+  loader: { marginVertical: spacing.md },
+  feed: {
+    paddingHorizontal: spacing.lg,
+    flexGrow: 1,
   },
-  buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: "#f5f7fb", fontWeight: "600" },
-  buttonSecondaryText: { color: "#cbd5e1", fontWeight: "500" },
-  localPreview: { width: "100%", height: 160, borderRadius: 10, backgroundColor: "#0b1220" },
-  vibe: {
-    gap: 6,
-    paddingBottom: 16,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#1e293b",
+  separator: { height: 14 },
+  empty: { paddingVertical: spacing.lg, gap: spacing.xs },
+  emptyTitle: {
+    color: colors.textPrimary,
+    fontFamily: fontFamilies.instrumentSerif,
+    fontSize: 26,
   },
-  preview: { width: "100%", height: 220, borderRadius: 12, backgroundColor: "#121a2b" },
-  previewEmpty: { alignItems: "center", justifyContent: "center" },
-  author: { color: "#f5f7fb", fontWeight: "600" },
-  caption: { color: "#d7deee" },
-  report: { alignSelf: "flex-start", paddingVertical: 4 },
-  reportText: { color: "#f87171", fontSize: 13 },
+  emptyBody: {
+    color: colors.textSecondary,
+    fontFamily: fontFamilies.geistRegular,
+    fontSize: 14,
+    lineHeight: 20,
+  },
 });

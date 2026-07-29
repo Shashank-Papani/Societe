@@ -7,6 +7,8 @@
     "node": ">=24 <25"
   },
   "dependencies": {
+    "@expo-google-fonts/geist": "^0.4.2",
+    "@expo-google-fonts/instrument-serif": "^0.4.1",
     "@expo/ui": "~57.0.7",
     "@tanstack/react-query": "^5.101.4",
     "expo": "~57.0.8",
@@ -21,6 +23,7 @@
     "expo-image": "~57.0.1",
     "expo-image-manipulator": "~57.0.6",
     "expo-image-picker": "57.0.6",
+    "expo-linear-gradient": "~57.0.1",
     "expo-linking": "~57.0.4",
     "expo-location": "^57.0.6",
     "expo-router": "~57.0.8",
@@ -30,6 +33,7 @@
     "expo-status-bar": "~57.0.1",
     "expo-symbols": "~57.0.1",
     "expo-system-ui": "~57.0.1",
+    "expo-task-manager": "~57.0.6",
     "expo-web-browser": "~57.0.2",
     "react": "19.2.3",
     "react-dom": "19.2.3",
@@ -56,6 +60,6 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test src/features/experience/mediaValidation.test.ts src/features/connect/queueHelpers.test.ts src/features/messages/messageHelpers.test.ts src/auth/deviceKeys.test.ts src/auth/emailValidation.test.ts src/auth/deviceKeyMigration.test.ts src/features/profile/profilePhotoUi.test.ts src/features/profile/profilePhotoCropMath.test.ts"
+    "test": "node --experimental-strip-types --test src/features/experience/mediaValidation.test.ts src/features/experience/vibeLifecycle.test.ts src/features/experience/vibeMedia.test.ts src/features/connect/queueHelpers.test.ts src/features/connect/connectPresentation.test.ts src/features/connect/callingCardComposer.test.ts src/features/messages/messageHelpers.test.ts src/features/messages/messagesPresentation.test.ts src/auth/deviceKeys.test.ts src/auth/emailValidation.test.ts src/auth/deviceKeyMigration.test.ts src/features/profile/profilePhotoUi.test.ts src/features/profile/profilePhotoCropMath.test.ts src/features/profile/blockedUsersUi.test.ts src/features/auth/welcomeContent.test.ts src/features/discover/discoverPresentation.test.ts src/features/venue/venuePresentation.test.ts src/features/venue/venueImage.test.ts src/features/presence/presenceErrors.test.ts src/features/presence/presencePresentation.test.ts src/features/presence/presenceEligibility.test.ts src/features/presence/presenceRetention.test.ts src/theme/designSystem.test.ts src/navigation/tabBar.test.ts"
   }
 }

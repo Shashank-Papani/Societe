@@ -1,0 +1,17 @@
+{
+  "expo": {
+    "name": "NOIR",
+    "slug": "noir",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "ios": {
+      "supportsTablet": false
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#020704"
+      }
+    }
+  }
+}

@@ -15,12 +15,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import Settings
 from app.core.errors import AppError
 from app.core.logging import get_logger
-from app.db.models import CheckIn, OutboxEvent, User, UserDevice
+from app.db.models import CheckIn, OutboxEvent, User, UserDevice, Venue
 from app.modules.presence.engine import PresenceEngine
-from app.modules.presence.geospatial import get_venue_name
+from app.modules.presence.geospatial import describe_venue_for_point, get_venue_name
 from app.modules.presence.leases import PresenceLeaseStore
+from app.modules.presence.policy import resolve_venue_policy, within_entry_radius
 from app.modules.presence.samples import SampleBuffer
 from app.modules.presence.schemas import (
+    EligibilityData,
+    EligibilityRequest,
     EvidenceRequest,
     PresenceData,
     PresenceState,
@@ -33,7 +36,7 @@ DEGRADE_SQL = """
 WITH due AS (
     SELECT id
     FROM app.check_ins
-    WHERE state = 'verified'
+    WHERE state IN ('verified', 'rechecking')
       AND verified_until IS NOT NULL
       AND verified_until <= now()
     ORDER BY verified_until
@@ -51,7 +54,7 @@ EXPIRE_SQL = """
 WITH due AS (
     SELECT id
     FROM app.check_ins
-    WHERE state IN ('provisional', 'verified', 'degraded')
+    WHERE state IN ('provisional', 'verified', 'rechecking', 'degraded')
       AND grace_until IS NOT NULL
       AND grace_until <= now()
     ORDER BY grace_until
@@ -134,6 +137,148 @@ class PresenceService:
             allow_simulated=allow_simulated,
         )
 
+    async def evaluate_eligibility(
+        self,
+        *,
+        user: User,
+        request: EligibilityRequest,
+        received_at: datetime,
+    ) -> EligibilityData:
+        """Proximity preview for UI. Never writes leases, evidence, or samples."""
+        accuracy = request.horizontal_accuracy_m
+        age_seconds = (received_at - request.observed_at).total_seconds()
+        if age_seconds > self._settings.max_evidence_age_seconds:
+            return EligibilityData(
+                eligible=False,
+                reason="stale_evidence",
+                distance_meters=None,
+                allowed_radius_meters=None,
+                location_accuracy_meters=accuracy,
+                venue_id=request.candidate_venue_id,
+                observed_at=request.observed_at,
+            )
+        if age_seconds < -self._settings.max_observed_future_skew_seconds:
+            return EligibilityData(
+                eligible=False,
+                reason="observed_at_in_future",
+                distance_meters=None,
+                allowed_radius_meters=None,
+                location_accuracy_meters=accuracy,
+                venue_id=request.candidate_venue_id,
+                observed_at=request.observed_at,
+            )
+
+        venue_row = await self._session.execute(
+            select(Venue).where(Venue.id == request.candidate_venue_id)
+        )
+        venue = venue_row.scalar_one_or_none()
+        if venue is None:
+            return EligibilityData(
+                eligible=False,
+                reason="venue_not_found",
+                distance_meters=None,
+                allowed_radius_meters=None,
+                location_accuracy_meters=accuracy,
+                venue_id=request.candidate_venue_id,
+                observed_at=request.observed_at,
+            )
+        if venue.status != "active":
+            return EligibilityData(
+                eligible=False,
+                reason="venue_inactive",
+                distance_meters=None,
+                allowed_radius_meters=None,
+                location_accuracy_meters=accuracy,
+                venue_id=request.candidate_venue_id,
+                observed_at=request.observed_at,
+            )
+
+        try:
+            lease = await self._leases.read(user.id)
+        except RedisError:
+            lease = None
+        policy = resolve_venue_policy(self._settings, venue)
+        allowed = policy.entry_radius_meters
+
+        if (
+            lease is not None
+            and lease.venue_id == request.candidate_venue_id
+            and lease.state in {"verified", "rechecking"}
+            and received_at < lease.verified_until
+        ):
+            candidate = await describe_venue_for_point(
+                self._session,
+                request.candidate_venue_id,
+                request.latitude,
+                request.longitude,
+            )
+            distance = (
+                0.0
+                if candidate is not None and candidate.inside
+                else (candidate.centroid_distance_m if candidate is not None else None)
+            )
+            return EligibilityData(
+                eligible=False,
+                reason="already_verified",
+                distance_meters=distance,
+                allowed_radius_meters=allowed,
+                location_accuracy_meters=accuracy,
+                venue_id=request.candidate_venue_id,
+                observed_at=request.observed_at,
+            )
+
+        candidate = await describe_venue_for_point(
+            self._session,
+            request.candidate_venue_id,
+            request.latitude,
+            request.longitude,
+        )
+        if candidate is None:
+            return EligibilityData(
+                eligible=False,
+                reason="venue_not_found",
+                distance_meters=None,
+                allowed_radius_meters=None,
+                location_accuracy_meters=accuracy,
+                venue_id=request.candidate_venue_id,
+                observed_at=request.observed_at,
+            )
+
+        distance = 0.0 if candidate.inside else candidate.centroid_distance_m
+
+        if accuracy > policy.maximum_location_accuracy_meters:
+            return EligibilityData(
+                eligible=False,
+                reason="accuracy_exceeds_venue_maximum",
+                distance_meters=distance,
+                allowed_radius_meters=allowed,
+                location_accuracy_meters=accuracy,
+                venue_id=request.candidate_venue_id,
+                observed_at=request.observed_at,
+            )
+
+        within = candidate.inside or within_entry_radius(distance_meters=distance, policy=policy)
+        if not within:
+            return EligibilityData(
+                eligible=False,
+                reason="outside",
+                distance_meters=distance,
+                allowed_radius_meters=allowed,
+                location_accuracy_meters=accuracy,
+                venue_id=request.candidate_venue_id,
+                observed_at=request.observed_at,
+            )
+
+        return EligibilityData(
+            eligible=True,
+            reason="eligible",
+            distance_meters=distance,
+            allowed_radius_meters=allowed,
+            location_accuracy_meters=accuracy,
+            venue_id=request.candidate_venue_id,
+            observed_at=request.observed_at,
+        )
+
     async def _load_device(self, user: User, device_id: UUID) -> UserDevice:
         result = await self._session.execute(select(UserDevice).where(UserDevice.id == device_id))
         device = result.scalar_one_or_none()
@@ -179,10 +324,42 @@ class PresenceService:
                 reasons=[] if cache_ok else ["presence_cache_unavailable"],
             )
 
+        # Read-time expiry: do not wait for the cleanup worker.
+        if moment >= lease.grace_until:
+            if active is not None and active.state in {
+                "provisional",
+                "verified",
+                "rechecking",
+                "degraded",
+            }:
+                # Lazy transition for public projection; worker still cleans durable row.
+                pass
+            venue_name = await get_venue_name(self._session, lease.venue_id)
+            return PresenceData(
+                state="exited" if active is not None else "outside",
+                venue=(
+                    PresenceVenue(id=lease.venue_id, name=venue_name or "Unknown venue")
+                    if active is not None
+                    else None
+                ),
+                verification_level=None,
+                lease_expires_at=None,
+                grace_expires_at=lease.grace_until,
+                social_features_enabled=False,
+                decision="expired",
+                reasons=["lease_expired"],
+            )
+
         state: PresenceState
         lease_expires_at: datetime | None
-        if lease.state == "verified" and moment < lease.verified_until:
-            state = "verified"
+        outside_pending = bool(
+            active is not None and int(getattr(active, "outside_confirmation_count", 0) or 0) > 0
+        )
+        if active is not None and active.state == "rechecking" and moment < lease.verified_until:
+            state = "rechecking"
+            lease_expires_at = lease.verified_until
+        elif lease.state == "verified" and moment < lease.verified_until:
+            state = "rechecking" if outside_pending else "verified"
             lease_expires_at = lease.verified_until
         elif lease.state == "provisional" and moment < lease.grace_until:
             state = "provisional"
@@ -200,14 +377,17 @@ class PresenceService:
         venue_name = await get_venue_name(self._session, lease.venue_id)
         ghost = lease.ghost_mode
         social = (
-            state == "verified"
+            state in {"verified", "rechecking"}
             and not ghost
             and lease.discoverable
             and self._allow_calling_cards(user)
             and user.account_status == "active"
             and user.deleted_at is None
         )
-        level = lease.verification_level if state in {"verified", "provisional"} else None
+        level = (
+            lease.verification_level if state in {"verified", "rechecking", "provisional"} else None
+        )
+        policy = resolve_venue_policy(self._settings, None)
         return PresenceData(
             state=state,
             venue=(
@@ -217,6 +397,11 @@ class PresenceService:
             ),
             verification_level=level if level in {"weak", "standard"} else None,  # type: ignore[arg-type]
             lease_expires_at=lease_expires_at,
+            grace_expires_at=lease.grace_until,
+            entry_radius_meters=policy.entry_radius_meters,
+            retention_radius_meters=policy.retention_radius_meters,
+            distance_meters=getattr(active, "last_distance_meters", None) if active else None,
+            outside_confirmation_pending=outside_pending and state == "rechecking",
             social_features_enabled=social,
             decision="current",
             reasons=[],
@@ -268,12 +453,13 @@ class PresenceService:
             # Either never present or the lease already expired. Both require the
             # client to re-prove before it can attach media to a venue.
             return PostingAuthorization(allowed=False, reason="presence_refresh_required")
-        if lease.state != "verified":
+        if lease.state not in {"verified", "rechecking"}:
             return PostingAuthorization(
                 allowed=False,
                 reason=f"presence_{lease.state}",
                 lease_state=lease.state,
             )
+        # Grace blocks new Live Vibes; rechecking still allows finishing posts.
         if moment >= lease.verified_until:
             return PostingAuthorization(
                 allowed=False,

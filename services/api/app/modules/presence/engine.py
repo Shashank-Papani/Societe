@@ -47,8 +47,8 @@ from app.modules.presence.schemas import (
 
 logger = get_logger(__name__)
 
-ACTIVE_CHECK_IN_STATES = ("provisional", "verified", "degraded")
-DURABLE_STATES = frozenset({"provisional", "verified", "degraded"})
+ACTIVE_CHECK_IN_STATES = ("provisional", "verified", "rechecking", "degraded")
+DURABLE_STATES = frozenset({"provisional", "verified", "rechecking", "degraded"})
 
 # A neighbour polygon this close is treated as sharing our boundary regardless of
 # reported accuracy.
@@ -267,25 +267,36 @@ class PresenceEngine:
         accuracy_m: float,
         hint: UUID | None,
     ) -> tuple[VenueCandidate | None, bool]:
-        """Return (venue, inside). Falls back to the accuracy-aware entry buffer."""
+        """Return (venue, inside).
+
+        ``inside`` means polygon cover **or** centroid within the product entry
+        radius (0.10 mi). Retention (0.15 mi) is applied only for established
+        presence renewal, not initial verification.
+        """
+        entry_radius = float(self._settings.presence_entry_radius_meters)
+
         covering = [c for c in candidates if c.inside]
         if covering:
             return covering[0], True
 
-        def in_entry_buffer(candidate: VenueCandidate) -> bool:
-            # Accuracy widens the buffer, but never beyond what the venue is
-            # willing to accept as a usable fix.
+        def in_entry_radius(candidate: VenueCandidate) -> bool:
+            if candidate.centroid_distance_m <= entry_radius:
+                return True
+            # Accuracy widens the legacy polygon buffer, but never beyond the
+            # venue's accepted fix quality.
             slack = min(accuracy_m, candidate.max_gps_accuracy_m)
             return candidate.boundary_distance_m <= candidate.entry_buffer_m + slack
 
-        eligible = [c for c in candidates if in_entry_buffer(c)]
+        eligible = [c for c in candidates if in_entry_radius(c)]
         if not eligible:
             return None, False
         if hint is not None:
             hinted = next((c for c in eligible if c.id == hint), None)
             if hinted is not None:
-                return hinted, False
-        return eligible[0], False
+                # Centroid-within-entry counts as inside for verification.
+                return hinted, hinted.centroid_distance_m <= entry_radius
+        selected = eligible[0]
+        return selected, selected.centroid_distance_m <= entry_radius
 
     @staticmethod
     def _dwell_satisfied(
@@ -469,8 +480,10 @@ class PresenceEngine:
         already_here = (
             active is not None
             and active.venue_id == selected.id
-            and active.state in {"verified", "degraded"}
+            and active.state in {"verified", "rechecking", "degraded"}
         )
+        retention_radius = float(self._settings.presence_retention_radius_meters)
+        within_retention = selected.inside or selected.centroid_distance_m <= retention_radius
         dwell_ok = already_here or self._dwell_satisfied(
             prior_samples,
             venue_id=selected.id,
@@ -480,29 +493,38 @@ class PresenceEngine:
         )
 
         reasons: list[str] = []
-        if inside and accuracy_ok and dwell_ok:
+        # Established presence may renew inside the larger retention radius
+        # even when outside the entry radius (hysteresis).
+        if already_here and within_retention and accuracy_ok:
             state: PresenceState = "verified"
+            durable = "verified"
+            level = "standard"
+            decision_code = "renewed" if not inside else "verified"
+            verdict = "inside"
+        elif inside and accuracy_ok and dwell_ok:
+            state = "verified"
             durable = "verified"
             level = "standard"
             decision_code = "verified"
         elif already_here and active is not None:
             # An established check-in is not downgraded by one weak sample. The
             # lease keeps its own expiry, which this sample does not extend, and
-            # the aggregator enforces it.
+            # the aggregator enforces it. Prefer /presence/heartbeat for
+            # outside-confirmation retention.
             return Decision(
                 state=self._response_state(active.state),
                 decision="hold",
                 reasons=[
                     "accuracy_exceeds_venue_maximum"
-                    if inside
-                    else "outside_polygon_within_entry_buffer"
+                    if within_retention
+                    else "outside_retention_radius"
                 ],
                 venue=selected,
                 durable_state=None,
                 verification_level=active.verification_level,
                 confidence=active.confidence_score,
                 sample_verdict=verdict,
-                credible_outside=credible_outside,
+                credible_outside=not within_retention and accuracy_ok,
             )
         else:
             state = "provisional"
@@ -610,7 +632,7 @@ class PresenceEngine:
 
     @staticmethod
     def _response_state(durable_state: str) -> PresenceState:
-        if durable_state in {"provisional", "verified", "degraded"}:
+        if durable_state in {"provisional", "verified", "rechecking", "degraded"}:
             return durable_state  # type: ignore[return-value]
         return "outside"
 
@@ -686,6 +708,12 @@ class PresenceEngine:
                 check_in = active
                 verified_until = active.verified_until
                 grace_until = active.grace_until
+
+            if check_in is not None:
+                check_in.last_location_accuracy_meters = request.location.horizontal_accuracy_m
+                check_in.last_evidence_observed_at = request.observed_at.astimezone(UTC)
+                if decision.venue is not None:
+                    check_in.last_distance_meters = decision.venue.centroid_distance_m
 
             if decision.persist_evidence or state_changed:
                 # Raw SQL does not autoflush, and the evidence row carries an FK
@@ -795,8 +823,14 @@ class PresenceEngine:
             active.updated_at = received_at
             if decision.durable_state == "verified":
                 active.last_verified_at = received_at
+                active.last_valid_evidence_at = received_at
+                active.outside_confirmation_count = 0
+                active.first_outside_observed_at = None
+                active.last_outside_observed_at = None
                 if active.verified_at is None:
                     active.verified_at = received_at
+            if decision.venue is not None:
+                active.last_distance_meters = decision.venue.centroid_distance_m
             if changed:
                 self._emit(
                     event_type=f"presence.{decision.durable_state}",

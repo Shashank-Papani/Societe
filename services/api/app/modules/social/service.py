@@ -33,7 +33,13 @@ from app.modules.social.lifecycle import (
     CallingCardLifecycleService,
     compute_calling_card_expiry,
 )
+from app.modules.social.message_validation import (
+    normalize_custom_message,
+    require_opener,
+)
 from app.modules.social.schemas import (
+    BlockedUserItem,
+    BlockedUsersResponse,
     BlockResponse,
     BlockUserRequest,
     CallingCardCreateResponse,
@@ -81,11 +87,30 @@ class SocialService:
                 expires_at=existing.expires_at,
             )
 
-        auth = await self._authz.authorize_send(
-            sender=user,
-            recipient_user_id=request.recipient_user_id,
-            now=now,
+        message_source = (
+            request.custom_message if request.custom_message is not None else request.reason_text
         )
+        custom_message = normalize_custom_message(message_source)
+        require_opener(reason_code=request.reason_code, custom_message=custom_message)
+
+        try:
+            auth = await self._authz.authorize_send(
+                sender=user,
+                recipient_user_id=request.recipient_user_id,
+                now=now,
+            )
+        except AppError as exc:
+            if exc.code == "CALLING_CARD_ALREADY_ACTIVE":
+                pending = await self._load_pending_for_pair(user.id, request.recipient_user_id)
+                if pending is not None:
+                    return CallingCardCreateResponse(
+                        id=pending.id,
+                        status=pending.status,  # type: ignore[arg-type]
+                        venue_id=pending.venue_id,
+                        expires_at=pending.expires_at,
+                    )
+            raise
+
         expires_at = compute_calling_card_expiry(now, auth.venue_timezone, self._settings)
         card = CallingCard(
             sender_user_id=user.id,
@@ -94,7 +119,8 @@ class SocialService:
             sender_check_in_id=auth.sender_check_in_id,
             recipient_check_in_id=auth.recipient_check_in_id,
             reason_code=request.reason_code,
-            reason_text=request.reason_text,
+            reason_text=custom_message,
+            custom_message=custom_message,
             status="pending",
             idempotency_key=idempotency_key,
             created_at=now,
@@ -113,8 +139,16 @@ class SocialService:
                     venue_id=raced.venue_id,
                     expires_at=raced.expires_at,
                 )
+            pending = await self._load_pending_for_pair(user.id, request.recipient_user_id)
+            if pending is not None:
+                return CallingCardCreateResponse(
+                    id=pending.id,
+                    status=pending.status,  # type: ignore[arg-type]
+                    venue_id=pending.venue_id,
+                    expires_at=pending.expires_at,
+                )
             raise AppError(
-                "CALLING_CARD_PENDING_EXISTS",
+                "CALLING_CARD_ALREADY_ACTIVE",
                 "A pending Calling Card already exists for this pair.",
                 status_code=409,
             ) from exc
@@ -151,8 +185,8 @@ class SocialService:
             .order_by(CallingCard.created_at.desc())
             .limit(50)
         )
-        items = [self._summary(card) for card in result.scalars().all()]
-        return CallingCardListResponse(items=items)
+        cards = list(result.scalars().all())
+        return CallingCardListResponse(items=await self._summaries_with_grants(cards))
 
     async def sent(self, *, user: User, now: datetime) -> CallingCardListResponse:
         require_calling_cards_enabled(self._settings)
@@ -163,8 +197,8 @@ class SocialService:
             .order_by(CallingCard.created_at.desc())
             .limit(50)
         )
-        items = [self._summary(card) for card in result.scalars().all()]
-        return CallingCardListResponse(items=items)
+        cards = list(result.scalars().all())
+        return CallingCardListResponse(items=await self._summaries_with_grants(cards))
 
     async def detail(
         self, *, user: User, calling_card_id: UUID, now: datetime
@@ -172,7 +206,11 @@ class SocialService:
         require_calling_cards_enabled(self._settings)
         card = await self._load_visible_card(user, calling_card_id, now=now)
         grant = await self._load_grant(card.id)
-        return CallingCardDetailResponse(card=self._summary(card), grant=self._grant_summary(grant))
+        active = grant is not None and grant.revoked_at is None
+        return CallingCardDetailResponse(
+            card=self._summary(card, has_active_grant=active),
+            grant=self._grant_summary(grant),
+        )
 
     async def status(
         self, *, user: User, calling_card_id: UUID, now: datetime
@@ -226,13 +264,29 @@ class SocialService:
                 },
             )
             await self._session.commit()
-            return RespondCallingCardResponse(card=self._summary(card), grant=None)
+            return RespondCallingCardResponse(
+                card=self._summary(card, has_active_grant=False),
+                grant=None,
+            )
 
         if request.action is None:
             raise AppError(
                 "VALIDATION_ERROR",
                 "action is required when accepting a Calling Card.",
                 status_code=422,
+            )
+
+        # Idempotent accept: already-accepted card returns the existing grant.
+        if card.status == "accepted" and user.id == card.recipient_user_id:
+            grant = await self._load_grant(card.id)
+            if grant is None:
+                grant = await self._load_active_grant_for_pair(
+                    card.sender_user_id, card.recipient_user_id
+                )
+            active = grant is not None and grant.revoked_at is None
+            return RespondCallingCardResponse(
+                card=self._summary(card, has_active_grant=active),
+                grant=self._grant_summary(grant),
             )
 
         try:
@@ -271,8 +325,29 @@ class SocialService:
             created_at=now,
             expires_at=None,
         )
-        self._session.add(grant)
-        await self._session.flush()
+        try:
+            async with self._session.begin_nested():
+                self._session.add(grant)
+                await self._session.flush()
+        except IntegrityError:
+            existing_grant = await self._load_grant(card.id)
+            if existing_grant is None:
+                existing_grant = await self._load_active_grant_for_pair(
+                    card.sender_user_id, card.recipient_user_id
+                )
+            if existing_grant is None:
+                raise AppError(
+                    "CALLING_CARD_ALREADY_CONNECTED",
+                    "You are already connected with this user.",
+                    status_code=409,
+                ) from None
+            await self._session.commit()
+            existing_active = existing_grant.revoked_at is None
+            return RespondCallingCardResponse(
+                card=self._summary(card, has_active_grant=existing_active),
+                grant=self._grant_summary(existing_grant),
+            )
+
         self._emit(
             event_type="calling_card.accepted",
             card=card,
@@ -295,7 +370,7 @@ class SocialService:
         )
         await self._session.commit()
         return RespondCallingCardResponse(
-            card=self._summary(card),
+            card=self._summary(card, has_active_grant=True),
             grant=self._grant_summary(grant),
         )
 
@@ -329,7 +404,7 @@ class SocialService:
             payload={"calling_card_id": str(card.id), "status": card.status},
         )
         await self._session.commit()
-        return self._summary(card)
+        return self._summary(card, has_active_grant=False)
 
     async def share(
         self,
@@ -373,7 +448,10 @@ class SocialService:
             },
         )
         await self._session.commit()
-        return CallingCardDetailResponse(card=self._summary(card), grant=self._grant_summary(grant))
+        return CallingCardDetailResponse(
+            card=self._summary(card, has_active_grant=True),
+            grant=self._grant_summary(grant),
+        )
 
     async def discoverable_users(self, *, user: User, now: datetime) -> DiscoverableUsersResponse:
         require_calling_cards_enabled(self._settings)
@@ -452,24 +530,29 @@ class SocialService:
 
         return DiscoverableUsersResponse(venue_id=venue_id, items=items)
 
-    async def list_blocked_users(self, *, user: User) -> dict[str, object]:
+    async def list_blocked_users(self, *, user: User) -> BlockedUsersResponse:
+        from app.modules.identity.service import IdentityService
+
         result = await self._session.execute(
             select(UserBlock, User)
             .join(User, User.id == UserBlock.blocked_user_id)
             .where(UserBlock.blocker_user_id == user.id)
             .order_by(UserBlock.created_at.desc())
         )
-        items: list[dict[str, object]] = []
+        identity = IdentityService(self._session, self._settings)
+        items: list[BlockedUserItem] = []
         for block, blocked in result.all():
+            photo = await identity.approved_profile_photo_url(blocked)
             items.append(
-                {
-                    "user_id": str(blocked.id),
-                    "handle": blocked.handle,
-                    "display_name": blocked.display_name,
-                    "blocked_at": block.created_at.isoformat(),
-                }
+                BlockedUserItem(
+                    user_id=blocked.id,
+                    handle=blocked.handle,
+                    display_name=blocked.display_name,
+                    blocked_at=block.created_at,
+                    profile_photo_url=photo,
+                )
             )
-        return {"blocked_users": items}
+        return BlockedUsersResponse(blocked_users=items)
 
     async def block_user(
         self,
@@ -536,19 +619,15 @@ class SocialService:
     async def unblock_user(
         self, *, user: User, blocked_user_id: UUID, now: datetime
     ) -> UnblockResponse:
+        """Remove a block without restoring prior cards or connection grants.
+
+        Future interactions must satisfy normal presence/privacy rules again.
+        """
         block = await self._session.get(UserBlock, (user.id, blocked_user_id))
         removed = False
         if block is not None:
             await self._session.delete(block)
             removed = True
-            await self._restore_grants_revoked_by_block(user.id, blocked_user_id)
-            messaging = MessagingService(self._session, self._redis, self._settings)
-            await messaging.emit_messaging_enabled_for_pair(
-                user.id,
-                blocked_user_id,
-                now=now,
-                reason="user_unblocked",
-            )
             self._session.add(
                 OutboxEvent(
                     aggregate_type="user_block",
@@ -607,21 +686,6 @@ class SocialService:
         for grant in result.scalars().all():
             grant.revoked_at = now
             grant.revoked_reason = "user_blocked"
-
-    async def _restore_grants_revoked_by_block(self, a: UUID, b: UUID) -> None:
-        """Restore grants revoked solely by block so unblock can resume messaging."""
-        low, high = sorted((a, b))
-        result = await self._session.execute(
-            select(ConnectionGrant).where(
-                ConnectionGrant.user_a_id == low,
-                ConnectionGrant.user_b_id == high,
-                ConnectionGrant.revoked_reason == "user_blocked",
-            )
-        )
-        for grant in result.scalars().all():
-            grant.revoked_at = None
-            grant.revoked_reason = None
-            grant.expires_at = None
 
     async def _drop_discoverability(self, user_id: UUID) -> None:
         try:
@@ -723,8 +787,56 @@ class SocialService:
             )
         )
 
+    async def _load_pending_for_pair(
+        self, sender_id: UUID, recipient_id: UUID
+    ) -> CallingCard | None:
+        low, high = sorted((sender_id, recipient_id))
+        result = await self._session.execute(
+            select(CallingCard)
+            .where(
+                CallingCard.pair_low == low,
+                CallingCard.pair_high == high,
+                CallingCard.status == "pending",
+            )
+            .order_by(CallingCard.created_at.desc())
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
+
+    async def _load_active_grant_for_pair(
+        self, user_a: UUID, user_b: UUID
+    ) -> ConnectionGrant | None:
+        low, high = sorted((user_a, user_b))
+        result = await self._session.execute(
+            select(ConnectionGrant)
+            .where(
+                ConnectionGrant.user_a_id == low,
+                ConnectionGrant.user_b_id == high,
+                ConnectionGrant.revoked_at.is_(None),
+            )
+            .order_by(ConnectionGrant.created_at.desc())
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
+
+    async def _active_grant_card_ids(self, card_ids: list[UUID]) -> set[UUID]:
+        if not card_ids:
+            return set()
+        result = await self._session.execute(
+            select(ConnectionGrant.calling_card_id).where(
+                ConnectionGrant.calling_card_id.in_(card_ids),
+                ConnectionGrant.revoked_at.is_(None),
+            )
+        )
+        return set(result.scalars().all())
+
+    async def _summaries_with_grants(self, cards: list[CallingCard]) -> list[CallingCardSummary]:
+        active_ids = await self._active_grant_card_ids([card.id for card in cards])
+        return [self._summary(card, has_active_grant=card.id in active_ids) for card in cards]
+
     @staticmethod
-    def _summary(card: CallingCard) -> CallingCardSummary:
+    def _summary(card: CallingCard, *, has_active_grant: bool = False) -> CallingCardSummary:
+        message = card.custom_message if card.custom_message is not None else card.reason_text
         return CallingCardSummary(
             id=card.id,
             status=card.status,  # type: ignore[arg-type]
@@ -732,11 +844,13 @@ class SocialService:
             sender_user_id=card.sender_user_id,
             recipient_user_id=card.recipient_user_id,
             reason_code=card.reason_code,
-            reason_text=card.reason_text,
+            reason_text=message,
+            custom_message=message,
             created_at=card.created_at,
             expires_at=card.expires_at,
             responded_at=card.responded_at,
             response_action=card.response_action,  # type: ignore[arg-type]
+            has_active_grant=has_active_grant,
         )
 
     @staticmethod

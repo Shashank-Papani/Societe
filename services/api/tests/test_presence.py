@@ -28,6 +28,7 @@ def make_candidate(
     max_gps_accuracy_m: float = 50.0,
     entry_dwell_seconds: int = 10,
     exit_dwell_seconds: int = 30,
+    centroid_distance_m: float | None = None,
 ) -> VenueCandidate:
     return VenueCandidate(
         id=venue_id,
@@ -41,7 +42,13 @@ def make_candidate(
         exit_buffer_m=exit_buffer_m,
         inside=inside,
         boundary_distance_m=boundary_distance_m,
-        centroid_distance_m=boundary_distance_m + 20.0,
+        # Default far from centroid so polygon-buffer tests are not short-circuited
+        # by the product entry-radius (160.9344 m) path.
+        centroid_distance_m=(
+            centroid_distance_m
+            if centroid_distance_m is not None
+            else max(boundary_distance_m + 20.0, 500.0)
+        ),
         polygon_area_m2=500.0,
     )
 
@@ -260,14 +267,30 @@ def test_covering_venue_wins_over_buffer_candidate() -> None:
 def test_entry_buffer_widens_with_accuracy_but_is_capped() -> None:
     engine, _ = make_engine()
     # entry_buffer 10 + min(accuracy, max_gps_accuracy 50) = at most 60 m.
-    near = make_candidate(VENUE_A, inside=False, boundary_distance_m=55.0)
-    far = make_candidate(VENUE_B, inside=False, boundary_distance_m=65.0)
+    # Keep centroid far so product entry-radius hysteresis does not apply.
+    near = make_candidate(
+        VENUE_A, inside=False, boundary_distance_m=55.0, centroid_distance_m=500.0
+    )
+    far = make_candidate(VENUE_B, inside=False, boundary_distance_m=65.0, centroid_distance_m=500.0)
 
     selected, inside = engine._select_candidate([near], accuracy_m=500.0, hint=None)
     assert selected is not None and selected.id == VENUE_A
     assert inside is False
 
     assert engine._select_candidate([far], accuracy_m=500.0, hint=None) == (None, False)
+
+
+def test_centroid_within_entry_radius_counts_as_inside() -> None:
+    engine, _ = make_engine()
+    candidate = make_candidate(
+        VENUE_A,
+        inside=False,
+        boundary_distance_m=200.0,
+        centroid_distance_m=100.0,
+    )
+    selected, inside = engine._select_candidate([candidate], accuracy_m=8.0, hint=None)
+    assert selected is not None
+    assert inside is True
 
 
 def test_candidate_hint_only_breaks_ties_inside_the_buffer() -> None:

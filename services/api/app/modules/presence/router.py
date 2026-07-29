@@ -17,9 +17,12 @@ from app.core.auth.deps import (
 from app.core.config import Settings, get_settings
 from app.core.errors import AppError
 from app.db.session import get_redis
+from app.modules.presence.heartbeat import PresenceHeartbeatService
 from app.modules.presence.schemas import (
+    EligibilityRequest,
     EvidenceLocation,
     EvidenceRequest,
+    HeartbeatRequest,
     LeaveRequest,
     PlatformSignals,
     PresenceData,
@@ -107,6 +110,75 @@ async def get_presence_me(
     service = _service(session, settings)
     data = await service.get_me(ctx.user, now=_received_at(request))
     return _presence_body(request, data)
+
+
+@router.post("/presence/eligibility")
+async def evaluate_eligibility(
+    request: Request,
+    body: EligibilityRequest,
+    session: Annotated[AsyncSession, Depends(get_db)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    ctx: Annotated[CurrentUserContext, Depends(get_current_user)],
+) -> dict[str, Any]:
+    """Read-only eligibility preview for the selected venue.
+
+    Does not create leases, evidence, or sample-buffer writes. The verify
+    mutation remains the only path that grants presence.
+    """
+    service = _service(session, settings)
+    data = await service.evaluate_eligibility(
+        user=ctx.user,
+        request=body,
+        received_at=_received_at(request),
+    )
+    return success_response(data.model_dump(mode="json"), meta=_meta(request)).model_dump(
+        mode="json"
+    )
+
+
+@router.post("/presence/heartbeat")
+async def presence_heartbeat(
+    request: Request,
+    body: HeartbeatRequest,
+    response: Response,
+    session: Annotated[AsyncSession, Depends(get_db)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    ctx: Annotated[CurrentUserContext, Depends(get_current_user)],
+    idem: Annotated[IdempotencyService, Depends(get_idempotency_service)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> dict[str, Any]:
+    """Renew or recheck active venue presence from location evidence."""
+    service = PresenceHeartbeatService(session, get_redis(settings), settings)
+    received_at = _received_at(request)
+
+    async def handler() -> tuple[int, dict[str, Any]]:
+        data = await service.heartbeat(
+            user=ctx.user,
+            request=body,
+            received_at=received_at,
+            allow_simulated=settings.app_env in {"development", "test"},
+        )
+        return 200, _presence_body(request, data)
+
+    status, body_out = await idem.run(
+        IdempotencyContext(
+            user_id=str(ctx.user.id),
+            method="POST",
+            route="/v1/presence/heartbeat",
+            body={
+                "evidence_id": str(body.evidence_id),
+                "device_id": str(body.device_id),
+                "client_sequence": body.client_sequence,
+                "venue_id": str(body.venue_id) if body.venue_id else None,
+                "check_in_id": str(body.check_in_id) if body.check_in_id else None,
+            },
+            key=idempotency_key,
+        ),
+        handler,
+        ttl_seconds=settings.evidence_idempotency_ttl_seconds,
+    )
+    response.status_code = status
+    return body_out
 
 
 @router.post("/presence/leave")

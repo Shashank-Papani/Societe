@@ -20,7 +20,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import Settings
 from app.core.errors import AppError
 from app.core.logging import get_logger
-from app.db.models import CallingCard, CheckIn, User, UserBlock, UserPrivacySettings, Venue
+from app.db.models import (
+    CallingCard,
+    CheckIn,
+    ConnectionGrant,
+    User,
+    UserBlock,
+    UserPrivacySettings,
+    Venue,
+)
 from app.modules.presence.geospatial import get_venue_timezone
 from app.modules.presence.leases import LeaseSnapshot, PresenceLeaseStore
 from app.modules.social.lifecycle import venue_night_id
@@ -161,10 +169,18 @@ class CallingCardAuthorizer:
                 now=now,
             )
 
-        # 16. no pending card for the pair
+        # 16a. no active connection grant for the pair
+        if await self._active_grant_exists(sender.id, recipient.id):
+            raise AppError(
+                "CALLING_CARD_ALREADY_CONNECTED",
+                "You are already connected with this user.",
+                status_code=409,
+            )
+
+        # 16b. no pending card for the pair at this venue
         if await self._pending_pair_exists(sender.id, recipient.id, venue_id):
             raise AppError(
-                "CALLING_CARD_PENDING_EXISTS",
+                "CALLING_CARD_ALREADY_ACTIVE",
                 "A pending Calling Card already exists for this pair.",
                 status_code=409,
             )
@@ -473,7 +489,7 @@ class CallingCardAuthorizer:
             check_in is None
             or check_in.user_id != user_id
             or check_in.venue_id != venue_id
-            or check_in.state != "verified"
+            or check_in.state not in {"verified", "rechecking"}
             or check_in.exited_at is not None
             or check_in.verified_until is None
             or now >= check_in.verified_until
@@ -517,6 +533,19 @@ class CallingCardAuthorizer:
                 CallingCard.pair_high == high,
                 CallingCard.venue_id == venue_id,
                 CallingCard.status == "pending",
+            )
+        )
+        return int(result.scalar_one()) > 0
+
+    async def _active_grant_exists(self, sender_id: UUID, recipient_id: UUID) -> bool:
+        low, high = sorted((sender_id, recipient_id))
+        result = await self._session.execute(
+            select(func.count())
+            .select_from(ConnectionGrant)
+            .where(
+                ConnectionGrant.user_a_id == low,
+                ConnectionGrant.user_b_id == high,
+                ConnectionGrant.revoked_at.is_(None),
             )
         )
         return int(result.scalar_one()) > 0

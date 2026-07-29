@@ -1,29 +1,45 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { ApiError } from "@/api/client";
 import { useAuth } from "@/auth/AuthProvider";
 import { fetchMe } from "@/auth/localAuth";
-import { createConversation } from "@/features/messages/api";
-import { subscribeRealtime } from "@/realtime/client";
 import {
   blockUser,
-  CALLING_CARD_REASON_CODES,
   fetchCallingCardInbox,
   fetchCallingCardSent,
   fetchDiscoverableUsers,
   newIdempotencyKey,
+  type CallingCardReasonCode,
   type CallingCardSummary,
   type DiscoverableUser,
 } from "@/features/connect/api";
+import { CallingCardComposerSheet } from "@/features/connect/CallingCardComposerSheet";
+import { CallingCardRow } from "@/features/connect/CallingCardRow";
+import {
+  friendlyConnectStateLabel,
+  presenceContextLabel,
+} from "@/features/connect/connectPresentation";
+import { ConnectSkeleton } from "@/features/connect/ConnectSkeleton";
+import {
+  ConnectEmptyConnections,
+  ConnectEmptyNearby,
+  ConnectEmptyPending,
+  ConnectEmptyPresence,
+  ConnectErrorState,
+  ConnectGhostState,
+} from "@/features/connect/ConnectStates";
+import { DeveloperDiagnostics } from "@/features/connect/DeveloperDiagnostics";
+import { NearbyPersonCard } from "@/features/connect/NearbyPersonCard";
 import {
   enqueueCancelCallingCard,
   enqueueCreateCallingCard,
@@ -33,17 +49,17 @@ import {
   reconcileRespondOperationsWithCards,
   type QueuedOperation,
 } from "@/features/connect/offlineQueue";
-import {
-  formatExpiryCountdown,
-  mapServerCardStatusToUi,
-  reasonCodeLabel,
-  uiLabelForConnectState,
-  type ConnectUiState,
-} from "@/features/connect/queueHelpers";
+import type { ConnectUiState } from "@/features/connect/queueHelpers";
+import { createConversation } from "@/features/messages/api";
 import { fetchPresenceMe } from "@/features/presence/api";
+import { subscribeRealtime } from "@/realtime/client";
+import { tabScreenBottomPadding } from "@/navigation/tabBar";
+import { colors, fontFamilies } from "@/theme";
 
 const INBOX_POLL_MS = 12_000;
 const QUEUE_FLUSH_MS = 8_000;
+
+type NearbyRelation = "available" | "pending" | "connected" | "sending";
 
 function localOpUiState(op: QueuedOperation): ConnectUiState {
   switch (op.state) {
@@ -65,12 +81,108 @@ function localOpUiState(op: QueuedOperation): ConnectUiState {
   }
 }
 
+function parsePayload(op: QueuedOperation): Record<string, unknown> {
+  try {
+    return JSON.parse(op.payloadJson) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+}
+
+function activeCreateOpForRecipient(
+  ops: QueuedOperation[],
+  userId: string,
+): QueuedOperation | null {
+  return (
+    ops.find((item) => {
+      if (item.operationType !== "calling_card.create") {
+        return false;
+      }
+      if (!["queued", "sending", "failed_retryable"].includes(item.state)) {
+        return false;
+      }
+      return String(parsePayload(item).recipient_user_id ?? "") === userId;
+    }) ?? null
+  );
+}
+
+function queueHintForRecipient(ops: QueuedOperation[], userId: string): string | null {
+  const op = activeCreateOpForRecipient(ops, userId);
+  return op ? friendlyConnectStateLabel(localOpUiState(op)) : null;
+}
+
+function queueHintForCard(ops: QueuedOperation[], cardId: string): string | null {
+  const op = ops.find((item) => {
+    if (
+      item.operationType !== "calling_card.respond" &&
+      item.operationType !== "calling_card.cancel"
+    ) {
+      return false;
+    }
+    return String(parsePayload(item).calling_card_id ?? "") === cardId;
+  });
+  return op ? friendlyConnectStateLabel(localOpUiState(op)) : null;
+}
+
+function otherPartyId(card: CallingCardSummary, myId: string | undefined): string {
+  if (!myId) {
+    return card.sender_user_id;
+  }
+  return card.sender_user_id === myId ? card.recipient_user_id : card.sender_user_id;
+}
+
+/** Defense-in-depth: one connection row per peer (backend is authoritative). */
+function dedupeConnectionsByPeer(
+  cards: CallingCardSummary[],
+  myId: string | undefined,
+): CallingCardSummary[] {
+  const byPeer = new Map<string, CallingCardSummary>();
+  for (const card of cards) {
+    const peer = otherPartyId(card, myId);
+    const existing = byPeer.get(peer);
+    if (!existing) {
+      byPeer.set(peer, card);
+      continue;
+    }
+    const existingTs = Date.parse(existing.created_at);
+    const nextTs = Date.parse(card.created_at);
+    if (nextTs >= existingTs) {
+      byPeer.set(peer, card);
+    }
+  }
+  return [...byPeer.values()];
+}
+
+function relationForPerson(input: {
+  userId: string;
+  pendingPeerIds: Set<string>;
+  connectedPeerIds: Set<string>;
+  localOps: QueuedOperation[];
+  sendingUserId: string | null;
+}): NearbyRelation {
+  if (input.connectedPeerIds.has(input.userId)) {
+    return "connected";
+  }
+  if (input.pendingPeerIds.has(input.userId)) {
+    return "pending";
+  }
+  if (input.sendingUserId === input.userId) {
+    return "sending";
+  }
+  if (activeCreateOpForRecipient(input.localOps, input.userId)) {
+    return "pending";
+  }
+  return "available";
+}
+
 export function ConnectScreen() {
   const auth = useAuth();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
-  const [selectedUser, setSelectedUser] = useState<DiscoverableUser | null>(null);
-  const [reasonCode, setReasonCode] = useState<string>(CALLING_CARD_REASON_CODES[0]);
+  const bottomPad = tabScreenBottomPadding(insets.bottom);
+  const [composerPerson, setComposerPerson] = useState<DiscoverableUser | null>(null);
+  const [composerError, setComposerError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
 
@@ -160,15 +272,18 @@ export function ConnectScreen() {
     }
     return subscribeRealtime((envelope) => {
       const type = envelope.event_type ?? "";
-      if (type.startsWith("calling_card.") || type.startsWith("user.") || type.startsWith("conversation.") || type.startsWith("message.")) {
+      if (
+        type.startsWith("calling_card.") ||
+        type.startsWith("user.") ||
+        type.startsWith("conversation.") ||
+        type.startsWith("message.")
+      ) {
         void queryClient.invalidateQueries({ queryKey: ["connect"] });
         void queryClient.invalidateQueries({ queryKey: ["messages"] });
       }
     });
   }, [auth.status, queryClient]);
 
-  // Clear stale respond queue rows when inbox/sent already shows terminal status
-  // (network failure after the server committed accept/decline).
   useEffect(() => {
     if (auth.status !== "authenticated") {
       return;
@@ -190,9 +305,33 @@ export function ConnectScreen() {
       return conversation.id;
     },
     onSuccess: (id) => {
+      setActionError(null);
       router.push(`/messages/${id}`);
     },
-    onError: (error: Error) => setActionError(error.message),
+    onError: (error: Error) => {
+      if (__DEV__) {
+        console.warn("[connect.message]", error);
+      }
+      if (error instanceof ApiError) {
+        if (error.code === "CONNECTION_REQUIRED") {
+          setActionError("This connection is no longer active. Send a new Calling Card to reconnect.");
+          void queryClient.invalidateQueries({ queryKey: ["connect"] });
+          return;
+        }
+        if (error.code === "MESSAGING_BLOCKED") {
+          setActionError("Messaging isn’t available while a block is in place.");
+          void queryClient.invalidateQueries({ queryKey: ["connect"] });
+          return;
+        }
+        if (error.code === "MESSAGING_DISABLED") {
+          setActionError("Messaging is turned off in privacy settings.");
+          return;
+        }
+        setActionError(error.message || "Couldn’t open messages. Try again.");
+        return;
+      }
+      setActionError("Couldn’t open messages. Try again.");
+    },
   });
 
   const invalidateConnect = async () => {
@@ -203,24 +342,45 @@ export function ConnectScreen() {
   };
 
   const sendMutation = useMutation({
-    mutationFn: async () => {
-      if (!selectedUser) {
-        throw new Error("Pick someone nearby first.");
-      }
+    mutationFn: async (input: {
+      user: DiscoverableUser;
+      reasonCode: CallingCardReasonCode | null;
+      customMessage: string | null;
+    }) => {
       const key = newIdempotencyKey();
       await enqueueCreateCallingCard({
-        recipientUserId: selectedUser.user_id,
-        reasonCode,
+        recipientUserId: input.user.user_id,
+        reasonCode: input.reasonCode,
+        customMessage: input.customMessage,
         idempotencyKey: key,
       });
       await flushOfflineQueue();
     },
     onSuccess: async () => {
       setActionError(null);
-      setSelectedUser(null);
+      setComposerError(null);
+      setComposerPerson(null);
       await invalidateConnect();
     },
-    onError: (error: Error) => setActionError(error.message),
+    onError: (error: Error) => {
+      if (__DEV__) {
+        console.warn("[connect.send]", error);
+      }
+      if (error instanceof ApiError && error.code === "CALLING_CARD_ALREADY_CONNECTED") {
+        setComposerPerson(null);
+        setActionError(null);
+        void invalidateConnect();
+        return;
+      }
+      if (error instanceof ApiError && error.code === "CALLING_CARD_ALREADY_ACTIVE") {
+        setComposerPerson(null);
+        setActionError(null);
+        void invalidateConnect();
+        return;
+      }
+      // Keep composer open so the entered message is preserved.
+      setComposerError("Couldn’t send Calling Card. Try again.");
+    },
   });
 
   const respondMutation = useMutation({
@@ -239,7 +399,12 @@ export function ConnectScreen() {
       setActionError(null);
       await invalidateConnect();
     },
-    onError: (error: Error) => setActionError(error.message),
+    onError: (error: Error) => {
+      if (__DEV__) {
+        console.warn("[connect.respond]", error);
+      }
+      setActionError("Couldn’t update Calling Card. Try again.");
+    },
   });
 
   const cancelMutation = useMutation({
@@ -256,7 +421,12 @@ export function ConnectScreen() {
       setActionError(null);
       await invalidateConnect();
     },
-    onError: (error: Error) => setActionError(error.message),
+    onError: (error: Error) => {
+      if (__DEV__) {
+        console.warn("[connect.cancel]", error);
+      }
+      setActionError("Couldn’t cancel Calling Card. Try again.");
+    },
   });
 
   const blockMutation = useMutation({
@@ -265,342 +435,423 @@ export function ConnectScreen() {
       setActionError(null);
       await invalidateConnect();
     },
-    onError: (error: Error) => setActionError(error.message),
+    onError: (error: Error) => {
+      if (__DEV__) {
+        console.warn("[connect.block]", error);
+      }
+      setActionError("Couldn’t update block settings. Try again.");
+    },
   });
 
   const venueName = presenceQuery.data?.venue?.name ?? null;
   const pendingInbox = (inboxQuery.data?.items ?? []).filter((c) => c.status === "pending");
-  const sentItems = sentQuery.data?.items ?? [];
-  const localOps = queueQuery.data ?? [];
-
-  return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.brand}>Société</Text>
-      <Text style={styles.title}>Connect</Text>
-      <Text style={styles.subtitle}>
-        Same-venue Calling Cards · server-authoritative eligibility
-      </Text>
-
-      {auth.status === "authenticated" ? (
-        <Pressable style={styles.button} onPress={() => router.push("/messages")}>
-          <Text style={styles.buttonText}>Messages</Text>
-        </Pressable>
-      ) : null}
-
-      {auth.status === "initializing" || presenceQuery.isLoading ? (
-        <ActivityIndicator color="#9aa6bf" />
-      ) : null}
-
-      {auth.status === "unauthenticated" ? (
-        <Text style={styles.help}>Sign in on Profile to use Connect.</Text>
-      ) : null}
-
-      {auth.status === "authenticated" ? (
-        <View style={styles.card}>
-          <Text style={styles.section}>Presence gate</Text>
-          <Text style={styles.meta}>State: {presenceQuery.data?.state ?? "—"}</Text>
-          <Text style={styles.meta}>Venue: {venueName ?? "—"}</Text>
-          <Text style={styles.meta}>
-            Social eligible: {presenceQuery.data?.social_features_enabled ? "yes" : "no"}
-          </Text>
-          <Text style={styles.meta}>Ghost Mode: {ghostOn ? "on" : "off"}</Text>
-        </View>
-      ) : null}
-
-      {auth.status === "authenticated" && ghostOn ? (
-        <Text style={styles.help}>
-          Ghost Mode is on. You can browse Discover/Experience, but Calling Cards are disabled
-          until Ghost Mode is off and presence is re-verified.
-        </Text>
-      ) : null}
-
-      {auth.status === "authenticated" && !ghostOn && exited ? (
-        <Text style={styles.help}>
-          You are not verified at a venue. Submit presence on the Presence tab before sending or
-          accepting Calling Cards.
-        </Text>
-      ) : null}
-
-      {auth.status === "authenticated" && !ghostOn && !canSend && !exited ? (
-        <Text style={styles.help}>
-          Social features are not enabled for this presence lease yet. Refresh presence or wait for
-          verification to complete.
-        </Text>
-      ) : null}
-
-      {auth.status === "authenticated" && canSend && !ghostOn ? (
-        <View style={styles.card}>
-          <Text style={styles.section}>Nearby · {venueName}</Text>
-          {discoverQuery.isLoading ? <ActivityIndicator color="#9aa6bf" /> : null}
-          {discoverQuery.error ? (
-            <Text style={styles.error}>{(discoverQuery.error as Error).message}</Text>
-          ) : null}
-          {(discoverQuery.data?.items ?? []).length === 0 && !discoverQuery.isLoading ? (
-            <Text style={styles.help}>No discoverable people here right now.</Text>
-          ) : null}
-          {(discoverQuery.data?.items ?? []).map((user) => {
-            const selected = selectedUser?.user_id === user.user_id;
-            return (
-              <Pressable
-                key={user.user_id}
-                style={[styles.rowItem, selected && styles.rowItemSelected]}
-                onPress={() => setSelectedUser(user)}
-              >
-                <Text style={styles.author}>{user.display_name}</Text>
-                <Text style={styles.meta}>@{user.handle}</Text>
-                <Pressable
-                  style={styles.inlineLink}
-                  onPress={() => blockMutation.mutate(user.user_id)}
-                >
-                  <Text style={styles.reportText}>Block</Text>
-                </Pressable>
-              </Pressable>
-            );
-          })}
-
-          {selectedUser ? (
-            <View style={styles.compose}>
-              <Text style={styles.meta}>
-                Send to {selectedUser.display_name} · reason
-              </Text>
-              {CALLING_CARD_REASON_CODES.map((code) => (
-                <Pressable
-                  key={code}
-                  style={[styles.chip, reasonCode === code && styles.chipSelected]}
-                  onPress={() => setReasonCode(code)}
-                >
-                  <Text style={styles.chipText}>{reasonCodeLabel(code)}</Text>
-                </Pressable>
-              ))}
-              <Pressable
-                style={[styles.button, sendMutation.isPending && styles.buttonDisabled]}
-                disabled={sendMutation.isPending}
-                onPress={() => sendMutation.mutate()}
-              >
-                <Text style={styles.buttonText}>
-                  {sendMutation.isPending ? "Queueing…" : "Send Calling Card"}
-                </Text>
-              </Pressable>
-            </View>
-          ) : null}
-        </View>
-      ) : null}
-
-      {localOps.length > 0 ? (
-        <View style={styles.card}>
-          <Text style={styles.section}>Outbound queue</Text>
-          {localOps.map((op) => {
-            const ui = localOpUiState(op);
-            return (
-              <View key={op.id} style={styles.rowItem}>
-                <Text style={styles.author}>{op.operationType}</Text>
-                <Text style={styles.meta}>{uiLabelForConnectState(ui)}</Text>
-                {op.lastErrorCode ? (
-                  <Text style={styles.error}>{op.lastErrorCode}</Text>
-                ) : null}
-              </View>
-            );
-          })}
-        </View>
-      ) : null}
-
-      <Text style={styles.section}>Inbox</Text>
-      {inboxQuery.isLoading ? <ActivityIndicator color="#9aa6bf" /> : null}
-      {inboxQuery.error ? (
-        <Text style={styles.error}>{(inboxQuery.error as Error).message}</Text>
-      ) : null}
-      {pendingInbox.length === 0 && !inboxQuery.isLoading ? (
-        <Text style={styles.help}>No pending Calling Cards.</Text>
-      ) : null}
-      {pendingInbox.map((card) => (
-        <CardRow
-          key={card.id}
-          card={card}
-          nowMs={nowMs}
-          actions={
-            <View style={styles.actions}>
-              <Pressable
-                style={styles.button}
-                onPress={() => respondMutation.mutate({ card, decision: "accept" })}
-                disabled={respondMutation.isPending}
-              >
-                <Text style={styles.buttonText}>Accept</Text>
-              </Pressable>
-              <Pressable
-                style={styles.buttonSecondary}
-                onPress={() => respondMutation.mutate({ card, decision: "decline" })}
-                disabled={respondMutation.isPending}
-              >
-                <Text style={styles.buttonSecondaryText}>Decline</Text>
-              </Pressable>
-              <Pressable
-                style={styles.inlineLink}
-                onPress={() => blockMutation.mutate(card.sender_user_id)}
-              >
-                <Text style={styles.reportText}>Block sender</Text>
-              </Pressable>
-            </View>
-          }
-        />
-      ))}
-
-      {(inboxQuery.data?.items ?? [])
-        .filter((card) => card.status === "accepted")
-        .map((card) => (
-          <CardRow
-            key={`accepted-${card.id}`}
-            card={card}
-            nowMs={nowMs}
-            actions={
-              <Pressable
-                style={styles.button}
-                onPress={() =>
-                  openMessageMutation.mutate(
-                    card.sender_user_id === meQuery.data?.id
-                      ? card.recipient_user_id
-                      : card.sender_user_id,
-                  )
-                }
-                disabled={openMessageMutation.isPending}
-              >
-                <Text style={styles.buttonText}>Message</Text>
-              </Pressable>
-            }
-          />
-        ))}
-
-      <Text style={styles.section}>Sent</Text>
-      <Text style={styles.help}>
-        Only cards confirmed by the server appear here. Local queue items stay above until ack.
-      </Text>
-      {sentQuery.isLoading ? <ActivityIndicator color="#9aa6bf" /> : null}
-      {sentQuery.error ? (
-        <Text style={styles.error}>{(sentQuery.error as Error).message}</Text>
-      ) : null}
-      {sentItems.length === 0 && !sentQuery.isLoading ? (
-        <Text style={styles.help}>No server-confirmed sent cards yet.</Text>
-      ) : null}
-      {sentItems.map((card) => (
-        <CardRow
-          key={card.id}
-          card={card}
-          nowMs={nowMs}
-          actions={
-            card.status === "pending" ? (
-              <Pressable
-                style={styles.buttonSecondary}
-                onPress={() => cancelMutation.mutate(card)}
-                disabled={cancelMutation.isPending}
-              >
-                <Text style={styles.buttonSecondaryText}>Cancel</Text>
-              </Pressable>
-            ) : card.status === "accepted" ? (
-              <Pressable
-                style={styles.button}
-                onPress={() => openMessageMutation.mutate(card.recipient_user_id)}
-                disabled={openMessageMutation.isPending}
-              >
-                <Text style={styles.buttonText}>Message</Text>
-              </Pressable>
-            ) : null
-          }
-        />
-      ))}
-
-      {actionError ? <Text style={styles.error}>{actionError}</Text> : null}
-    </ScrollView>
+  const acceptedInbox = (inboxQuery.data?.items ?? []).filter(
+    (c) => c.status === "accepted" && c.has_active_grant !== false,
   );
-}
+  const acceptedSent = (sentQuery.data?.items ?? []).filter(
+    (c) => c.status === "accepted" && c.has_active_grant !== false,
+  );
+  const pendingSent = (sentQuery.data?.items ?? []).filter((c) => c.status === "pending");
+  const localOps = queueQuery.data ?? [];
+  const myId = meQuery.data?.id;
+  const peopleById = useMemo(() => {
+    const map = new Map<string, DiscoverableUser>();
+    for (const person of discoverQuery.data?.items ?? []) {
+      map.set(person.user_id, person);
+    }
+    return map;
+  }, [discoverQuery.data?.items]);
 
-function CardRow({
-  card,
-  nowMs,
-  actions,
-}: {
-  card: CallingCardSummary;
-  nowMs: number;
-  actions?: ReactNode;
-}) {
-  const ui = mapServerCardStatusToUi(card.status);
-  const countdown = formatExpiryCountdown(card.expires_at, nowMs);
+  const pendingPeerIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const card of pendingInbox) {
+      ids.add(card.sender_user_id);
+    }
+    for (const card of pendingSent) {
+      ids.add(card.recipient_user_id);
+    }
+    return ids;
+  }, [pendingInbox, pendingSent]);
+
+  const connectedPeerIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const card of [...acceptedInbox, ...acceptedSent]) {
+      ids.add(otherPartyId(card, myId));
+    }
+    return ids;
+  }, [acceptedInbox, acceptedSent, myId]);
+
+  const connections = useMemo(
+    () => dedupeConnectionsByPeer([...acceptedInbox, ...acceptedSent], myId),
+    [acceptedInbox, acceptedSent, myId],
+  );
+
+  const contextLine = useMemo(
+    () =>
+      presenceContextLabel({
+        venueName,
+        verified: Boolean(canSend),
+        ghostOn,
+      }),
+    [venueName, canSend, ghostOn],
+  );
+
+  const loadingShell =
+    auth.status === "initializing" ||
+    (auth.status === "authenticated" && presenceQuery.isLoading && !presenceQuery.data);
+
+  const openComposer = (user: DiscoverableUser) => {
+    setComposerError(null);
+    setComposerPerson(user);
+  };
+
   return (
-    <View style={styles.vibe}>
-      <Text style={styles.author}>{uiLabelForConnectState(ui)}</Text>
-      <Text style={styles.meta}>
-        {card.reason_code ? reasonCodeLabel(card.reason_code) : "No reason"} · {card.status}
-      </Text>
-      {countdown ? <Text style={styles.meta}>{countdown}</Text> : null}
-      {actions}
-    </View>
+    <SafeAreaView style={styles.safe} edges={["top", "left", "right"]} testID="connect-screen">
+      <ScrollView
+        contentContainerStyle={[styles.content, { paddingBottom: bottomPad }]}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.header}>
+          <View style={styles.headerCopy}>
+            <Text style={styles.title} accessibilityRole="header">
+              Connect
+            </Text>
+            {contextLine ? (
+              <Text style={styles.context} numberOfLines={2}>
+                {contextLine}
+              </Text>
+            ) : null}
+          </View>
+          <View style={styles.headerActions}>
+            {auth.status === "authenticated" ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Messages"
+                testID="connect-messages"
+                onPress={() => router.push("/messages")}
+                style={({ pressed }) => [styles.headerBtn, pressed && styles.pressed]}
+              >
+                <Text style={styles.headerBtnText}>Messages</Text>
+              </Pressable>
+            ) : null}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Profile settings"
+              testID="connect-settings"
+              onPress={() => router.push("/(tabs)/profile")}
+              hitSlop={8}
+              style={({ pressed }) => [styles.iconBtn, pressed && styles.pressed]}
+            >
+              <Text style={styles.iconBtnText}>⚙︎</Text>
+            </Pressable>
+          </View>
+        </View>
+
+        {loadingShell ? <ConnectSkeleton /> : null}
+
+        {auth.status === "unauthenticated" ? (
+          <Text style={styles.help}>Sign in on Profile to use Connect.</Text>
+        ) : null}
+
+        {auth.status === "authenticated" && ghostOn ? <ConnectGhostState /> : null}
+
+        {auth.status === "authenticated" && !ghostOn && (exited || !canSend) ? (
+          <ConnectEmptyPresence onGoPresence={() => router.push("/(tabs)/presence")} />
+        ) : null}
+
+        {auth.status === "authenticated" && canSend && !ghostOn ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Nearby</Text>
+
+            {discoverQuery.isLoading ? <ConnectSkeleton count={2} /> : null}
+            {discoverQuery.isError ? (
+              <ConnectErrorState
+                title="Couldn’t load people here"
+                onRetry={() => {
+                  void discoverQuery.refetch();
+                }}
+              />
+            ) : null}
+            {!discoverQuery.isLoading &&
+            !discoverQuery.isError &&
+            (discoverQuery.data?.items ?? []).length === 0 ? (
+              <ConnectEmptyNearby />
+            ) : null}
+
+            <View style={styles.stack}>
+              {(discoverQuery.data?.items ?? []).map((user) => {
+                const relation = relationForPerson({
+                  userId: user.user_id,
+                  pendingPeerIds,
+                  connectedPeerIds,
+                  localOps,
+                  sendingUserId:
+                    sendMutation.isPending && sendMutation.variables
+                      ? sendMutation.variables.user.user_id
+                      : null,
+                });
+                const actionLabel =
+                  relation === "connected"
+                    ? "Message"
+                    : relation === "pending" || relation === "sending"
+                      ? "Pending"
+                      : "Send Calling Card";
+                return (
+                  <NearbyPersonCard
+                    key={user.user_id}
+                    person={user}
+                    venueName={venueName}
+                    selected={composerPerson?.user_id === user.user_id}
+                    actionLabel={actionLabel}
+                    actionPending={relation === "pending" || relation === "sending"}
+                    statusHint={queueHintForRecipient(localOps, user.user_id)}
+                    onSelect={() => {
+                      if (relation === "available") {
+                        openComposer(user);
+                      }
+                    }}
+                    onPrimaryAction={() => {
+                      if (relation === "connected") {
+                        openMessageMutation.mutate(user.user_id);
+                        return;
+                      }
+                      if (relation === "available") {
+                        openComposer(user);
+                      }
+                    }}
+                    onBlock={() => blockMutation.mutate(user.user_id)}
+                  />
+                );
+              })}
+            </View>
+          </View>
+        ) : null}
+
+        {auth.status === "authenticated" && !ghostOn ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Incoming</Text>
+            {inboxQuery.isLoading ? <ConnectSkeleton count={1} /> : null}
+            {inboxQuery.isError ? (
+              <ConnectErrorState
+                title="Couldn’t load Calling Cards"
+                onRetry={() => {
+                  void inboxQuery.refetch();
+                }}
+              />
+            ) : null}
+            {!inboxQuery.isLoading && pendingInbox.length === 0 ? <ConnectEmptyPending /> : null}
+            <View style={styles.stack}>
+              {pendingInbox.map((card) => {
+                const sender = peopleById.get(card.sender_user_id);
+                return (
+                  <CallingCardRow
+                    key={card.id}
+                    card={card}
+                    nowMs={nowMs}
+                    title={sender?.display_name ?? "Incoming Calling Card"}
+                    handle={sender?.handle}
+                    subtitle={
+                      sender
+                        ? `@${sender.handle}${venueName ? ` · ${venueName}` : ""}`
+                        : venueName
+                          ? `At ${venueName}`
+                          : null
+                    }
+                    queueHint={queueHintForCard(localOps, card.id)}
+                    busy={respondMutation.isPending}
+                    onAccept={() => respondMutation.mutate({ card, decision: "accept" })}
+                    onDecline={() => respondMutation.mutate({ card, decision: "decline" })}
+                    onBlock={() => blockMutation.mutate(card.sender_user_id)}
+                  />
+                );
+              })}
+            </View>
+          </View>
+        ) : null}
+
+        {auth.status === "authenticated" ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Sent</Text>
+            {sentQuery.isLoading ? <ConnectSkeleton count={1} /> : null}
+            {sentQuery.isError ? (
+              <ConnectErrorState
+                title="Couldn’t load sent cards"
+                onRetry={() => {
+                  void sentQuery.refetch();
+                }}
+              />
+            ) : null}
+            {!sentQuery.isLoading && pendingSent.length === 0 ? (
+              <Text style={styles.muted}>No pending sent Calling Cards</Text>
+            ) : null}
+            <View style={styles.stack}>
+              {pendingSent.map((card) => {
+                const recipient = peopleById.get(card.recipient_user_id);
+                return (
+                  <CallingCardRow
+                    key={card.id}
+                    card={card}
+                    nowMs={nowMs}
+                    title={recipient?.display_name ?? "Sent Calling Card"}
+                    handle={recipient?.handle}
+                    subtitle={
+                      recipient
+                        ? `@${recipient.handle}`
+                        : venueName
+                          ? `At ${venueName}`
+                          : null
+                    }
+                    queueHint={queueHintForCard(localOps, card.id)}
+                    busy={cancelMutation.isPending}
+                    onCancel={() => cancelMutation.mutate(card)}
+                  />
+                );
+              })}
+            </View>
+          </View>
+        ) : null}
+
+        {auth.status === "authenticated" ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Connections</Text>
+            {connections.length === 0 ? <ConnectEmptyConnections /> : null}
+            <View style={styles.stack}>
+              {connections.map((card) => {
+                const peerId = otherPartyId(card, myId);
+                const peer = peopleById.get(peerId);
+                return (
+                  <CallingCardRow
+                    key={`accepted-${peerId}`}
+                    card={card}
+                    nowMs={nowMs}
+                    title={peer?.display_name ?? "Connected"}
+                    handle={peer?.handle}
+                    subtitle={peer ? `@${peer.handle}` : venueName ? `At ${venueName}` : null}
+                    showConnectionExpiry
+                    busy={openMessageMutation.isPending}
+                    onMessage={() => openMessageMutation.mutate(peerId)}
+                  />
+                );
+              })}
+            </View>
+          </View>
+        ) : null}
+
+        {actionError ? (
+          <Text style={styles.error} accessibilityLiveRegion="polite" testID="connect-action-error">
+            {actionError}
+          </Text>
+        ) : null}
+
+        <DeveloperDiagnostics
+          operations={localOps}
+          presenceState={presenceQuery.data?.state}
+          socialEligible={presenceQuery.data?.social_features_enabled}
+          ghostOn={ghostOn}
+        />
+      </ScrollView>
+
+      <CallingCardComposerSheet
+        key={composerPerson?.user_id ?? "composer-closed"}
+        visible={composerPerson != null}
+        person={composerPerson}
+        venueName={venueName}
+        submitting={sendMutation.isPending}
+        submitError={composerError}
+        onClose={() => {
+          if (sendMutation.isPending) {
+            return;
+          }
+          setComposerPerson(null);
+          setComposerError(null);
+        }}
+        onSend={({ reasonCode, customMessage }) => {
+          if (!composerPerson || sendMutation.isPending) {
+            return;
+          }
+          setComposerError(null);
+          sendMutation.mutate({
+            user: composerPerson,
+            reasonCode,
+            customMessage,
+          });
+        }}
+      />
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#0b1220" },
-  content: { padding: 20, gap: 12, paddingBottom: 64 },
-  brand: { color: "#f5f7fb", fontSize: 28, fontWeight: "700", letterSpacing: 0.4 },
-  title: { color: "#f5f7fb", fontSize: 22, fontWeight: "600" },
-  subtitle: { color: "#9aa6bf", marginBottom: 8 },
-  section: { color: "#f5f7fb", fontSize: 16, fontWeight: "600", marginTop: 8 },
-  help: { color: "#9aa6bf", lineHeight: 20 },
-  error: { color: "#f87171" },
-  card: {
-    gap: 8,
-    padding: 14,
-    borderRadius: 12,
-    backgroundColor: "#121a2b",
-    borderColor: "#1e293b",
-    borderWidth: 1,
+  safe: { flex: 1, backgroundColor: colors.background },
+  content: {
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    gap: 22,
   },
-  meta: { color: "#9aa6bf", fontSize: 13 },
-  author: { color: "#f5f7fb", fontWeight: "600" },
-  rowItem: {
-    gap: 4,
-    paddingVertical: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#1e293b",
+  header: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12,
   },
-  rowItemSelected: {
-    backgroundColor: "#1a2740",
-    borderRadius: 8,
-    paddingHorizontal: 8,
+  headerCopy: { flex: 1, gap: 4 },
+  title: {
+    color: colors.textPrimary,
+    fontFamily: fontFamilies.instrumentSerif,
+    fontSize: 36,
   },
-  compose: { gap: 8, marginTop: 8 },
-  chip: {
-    borderWidth: 1,
-    borderColor: "#334155",
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
+  context: {
+    color: colors.textSecondary,
+    fontFamily: fontFamilies.geistMedium,
+    fontSize: 13,
   },
-  chipSelected: {
-    borderColor: "#2563eb",
-    backgroundColor: "#172554",
-  },
-  chipText: { color: "#cbd5e1" },
-  button: {
-    backgroundColor: "#2563eb",
-    borderRadius: 10,
-    paddingVertical: 12,
+  headerActions: { flexDirection: "row", alignItems: "center", gap: 8 },
+  headerBtn: {
+    minHeight: 44,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    backgroundColor: colors.lime,
     alignItems: "center",
+    justifyContent: "center",
   },
-  buttonSecondary: {
-    borderRadius: 10,
-    paddingVertical: 12,
+  headerBtnText: {
+    color: colors.limeInk,
+    fontFamily: fontFamilies.geistBold,
+    fontSize: 13,
+  },
+  iconBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
     alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#334155",
+    justifyContent: "center",
   },
-  buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: "#f5f7fb", fontWeight: "600" },
-  buttonSecondaryText: { color: "#cbd5e1", fontWeight: "500" },
-  actions: { gap: 8, marginTop: 8 },
-  inlineLink: { alignSelf: "flex-start", paddingVertical: 4 },
-  reportText: { color: "#f87171", fontSize: 13 },
-  vibe: {
-    gap: 6,
-    paddingBottom: 16,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#1e293b",
+  iconBtnText: { color: colors.textPrimary, fontSize: 18 },
+  section: { gap: 12 },
+  sectionTitle: {
+    color: colors.gold,
+    fontFamily: fontFamilies.geistBold,
+    fontSize: 12,
+    letterSpacing: 1.2,
   },
+  stack: { gap: 12 },
+  help: {
+    color: colors.textSecondary,
+    fontFamily: fontFamilies.geistRegular,
+    fontSize: 14,
+  },
+  muted: {
+    color: colors.textSecondary,
+    fontFamily: fontFamilies.geistRegular,
+    fontSize: 13,
+  },
+  error: {
+    color: colors.danger,
+    fontFamily: fontFamilies.geistRegular,
+    fontSize: 13,
+  },
+  pressed: { opacity: 0.88 },
 });

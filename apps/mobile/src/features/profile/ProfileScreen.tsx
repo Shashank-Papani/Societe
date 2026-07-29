@@ -26,6 +26,8 @@ import {
   type MeUser,
 } from "@/auth/localAuth";
 import { ProfilePhotoSection } from "@/features/profile/ProfilePhotoSection";
+import { tabScreenBottomPadding } from "@/navigation/tabBar";
+import { colors, fontFamilies, radii, spacing } from "@/theme";
 
 function personaLabelForHandle(handle: string): string | null {
   const match = DEV_PERSONAS.find((p) => p.handle === handle);
@@ -38,7 +40,7 @@ export function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const switchPersona = useSwitchDevPersona();
-  const bottomPad = Math.max(insets.bottom, 16) + 24;
+  const bottomPad = tabScreenBottomPadding(insets.bottom);
 
   const meQuery = useQuery({
     queryKey: ["me"],
@@ -109,7 +111,7 @@ export function ProfileScreen() {
           automaticallyAdjustKeyboardInsets
           showsVerticalScrollIndicator
         >
-          <Text style={styles.brand}>Société</Text>
+          <Text style={styles.title}>Profile</Text>
           <Text style={styles.help}>Sign in to manage your profile.</Text>
           <Pressable style={styles.button} onPress={() => router.replace("/auth/email")}>
             <Text style={styles.buttonText}>Sign in</Text>
@@ -131,23 +133,21 @@ export function ProfileScreen() {
         automaticallyAdjustKeyboardInsets
         showsVerticalScrollIndicator
       >
-        <Text style={styles.brand}>Société</Text>
-        <Text style={styles.title}>Profile</Text>
-        <Text style={styles.meta}>API: {API_BASE_URL}</Text>
+        <Text style={styles.title} accessibilityRole="header">
+          Profile
+        </Text>
 
         {auth.status === "initializing" || meQuery.isLoading ? (
-          <ActivityIndicator color="#9aa6bf" />
+          <ActivityIndicator color={colors.lime} />
         ) : null}
 
         {auth.status === "authenticated" && meQuery.data ? (
           <View style={styles.block}>
-            <Text style={styles.handle}>@{meQuery.data.handle}</Text>
-            <Text style={styles.display}>{meQuery.data.display_name}</Text>
-
             <ProfilePhotoSection approvedUrl={meQuery.data.profile_photo_url} />
-            <Text style={styles.row}>Status: {meQuery.data.account_status}</Text>
-            <Text style={styles.row}>Onboarding: {meQuery.data.onboarding_state ?? "unknown"}</Text>
+            <Text style={styles.display}>{meQuery.data.display_name}</Text>
+            <Text style={styles.handle}>@{meQuery.data.handle}</Text>
             <Text style={styles.row}>{privacyHint}</Text>
+            {__DEV__ ? <Text style={styles.meta}>API: {API_BASE_URL}</Text> : null}
 
             <Text style={styles.label}>Privacy</Text>
             {(
@@ -167,6 +167,15 @@ export function ProfileScreen() {
                 />
               </View>
             ))}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Blocked Users"
+              testID="profile-blocked-users"
+              onPress={() => router.push("/blocked-users")}
+              style={styles.buttonSecondary}
+            >
+              <Text style={styles.buttonSecondaryText}>Blocked Users</Text>
+            </Pressable>
 
             <Text style={styles.label}>Devices</Text>
             {(devicesQuery.data ?? []).map((device) => (
@@ -196,14 +205,14 @@ export function ProfileScreen() {
             ) : null}
 
             <Pressable style={styles.buttonSecondary} onPress={() => logoutMutation.mutate()}>
-              <Text style={styles.buttonText}>Sign out</Text>
+              <Text style={styles.buttonSecondaryText}>Sign out</Text>
             </Pressable>
             <Pressable
               style={styles.buttonDanger}
               onPress={() => deactivateMutation.mutate()}
               disabled={busy}
             >
-              <Text style={styles.buttonText}>Deactivate account</Text>
+              <Text style={styles.buttonDangerText}>Deactivate account</Text>
             </Pressable>
           </View>
         ) : null}
@@ -228,56 +237,111 @@ function privacySummary(user: MeUser | null | undefined): string {
 const styles = StyleSheet.create({
   flex: {
     flex: 1,
-    backgroundColor: "#0b1220",
+    backgroundColor: colors.backgroundPrimary,
   },
   content: {
-    paddingTop: 56,
-    paddingHorizontal: 20,
-    gap: 10,
+    paddingTop: spacing.xxl,
+    paddingHorizontal: spacing.lg,
+    gap: spacing.sm,
     flexGrow: 1,
   },
-  brand: { fontSize: 28, fontWeight: "700", color: "#f5f7fb" },
-  title: { fontSize: 22, fontWeight: "600", color: "#f5f7fb" },
-  meta: { fontSize: 12, color: "#6f7c99", marginBottom: 8 },
-  block: { gap: 10 },
+  title: {
+    fontFamily: fontFamilies.instrumentSerif,
+    fontSize: 36,
+    color: colors.textPrimary,
+  },
+  meta: {
+    fontSize: 12,
+    fontFamily: fontFamilies.geistRegular,
+    color: colors.textTertiary,
+    marginBottom: 8,
+  },
+  block: { gap: spacing.sm },
   devBlock: {
     gap: 8,
     marginTop: 8,
     paddingTop: 8,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: "#1e293b",
+    borderTopColor: colors.borderSubtle,
   },
-  handle: { color: "#f5f7fb", fontSize: 20, fontWeight: "600" },
-  display: { color: "#9aa6bf", fontSize: 16 },
-  row: { color: "#9aa6bf", fontSize: 14 },
+  handle: {
+    color: colors.textSecondary,
+    fontSize: 15,
+    fontFamily: fontFamilies.geistMedium,
+  },
+  display: {
+    color: colors.textPrimary,
+    fontSize: 28,
+    fontFamily: fontFamilies.instrumentSerif,
+  },
+  row: {
+    color: colors.textSecondary,
+    fontSize: 14,
+    fontFamily: fontFamilies.geistRegular,
+  },
   rowSwitch: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    minHeight: 44,
   },
-  label: { fontSize: 18, fontWeight: "600", color: "#f5f7fb", marginTop: 8 },
-  help: { color: "#9aa6bf", lineHeight: 20 },
+  label: {
+    fontSize: 13,
+    fontFamily: fontFamilies.geistBold,
+    color: colors.gold,
+    letterSpacing: 1.1,
+    marginTop: spacing.md,
+  },
+  help: {
+    color: colors.textSecondary,
+    fontFamily: fontFamilies.geistRegular,
+    lineHeight: 20,
+  },
   button: {
-    backgroundColor: "#3b82f6",
+    backgroundColor: colors.neon,
     paddingVertical: 12,
     paddingHorizontal: 16,
-    borderRadius: 10,
+    borderRadius: radii.pill,
     alignItems: "center",
+    minHeight: 48,
+    justifyContent: "center",
   },
   buttonSecondary: {
-    backgroundColor: "#334155",
+    backgroundColor: colors.surfaceElevated,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.borderMedium,
     paddingVertical: 12,
     paddingHorizontal: 16,
-    borderRadius: 10,
+    borderRadius: radii.pill,
     alignItems: "center",
     marginTop: 8,
+    minHeight: 48,
+    justifyContent: "center",
   },
   buttonDanger: {
-    backgroundColor: "#7f1d1d",
+    backgroundColor: "rgba(255, 107, 107, 0.14)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255, 107, 107, 0.35)",
     paddingVertical: 12,
     paddingHorizontal: 16,
-    borderRadius: 10,
+    borderRadius: radii.pill,
     alignItems: "center",
+    minHeight: 48,
+    justifyContent: "center",
   },
-  buttonText: { color: "#fff", fontWeight: "600" },
+  buttonText: {
+    color: colors.neonText,
+    fontFamily: fontFamilies.geistBold,
+    fontSize: 14,
+  },
+  buttonSecondaryText: {
+    color: colors.textPrimary,
+    fontFamily: fontFamilies.geistBold,
+    fontSize: 14,
+  },
+  buttonDangerText: {
+    color: colors.danger,
+    fontFamily: fontFamilies.geistBold,
+    fontSize: 14,
+  },
 });

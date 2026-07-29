@@ -19,6 +19,7 @@ PresenceState = Literal[
     "refresh_required",
     "provisional",
     "verified",
+    "rechecking",
     "degraded",
     "exited",
     "ambiguous",
@@ -103,13 +104,72 @@ class PresenceData(BaseModel):
     venue: PresenceVenue | None = None
     verification_level: VerificationLevel | None = None
     lease_expires_at: datetime | None = None
+    grace_expires_at: datetime | None = None
+    entry_radius_meters: float | None = None
+    retention_radius_meters: float | None = None
+    distance_meters: float | None = None
+    next_recommended_check_at: datetime | None = None
+    outside_confirmation_pending: bool = False
     social_features_enabled: bool = False
     challenge: None = None
     decision: str
     reasons: list[str] = Field(default_factory=list)
 
 
+class HeartbeatRequest(BaseModel):
+    """Retention heartbeat evidence. Distance/eligibility are server-computed."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    evidence_id: UUID
+    observed_at: AwareDatetime
+    location: EvidenceLocation
+    platform_signals: PlatformSignals
+    venue_id: UUID | None = None
+    check_in_id: UUID | None = None
+    client_sequence: int = Field(ge=0)
+    device_id: UUID
+
+
 class PresenceResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     data: PresenceData
+
+
+class EligibilityRequest(BaseModel):
+    """Read-only proximity preview. Does not create leases or evidence rows."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    latitude: float = Field(ge=-90.0, le=90.0)
+    longitude: float = Field(ge=-180.0, le=180.0)
+    horizontal_accuracy_m: float = Field(ge=0.0, le=10_000.0)
+    observed_at: AwareDatetime
+    candidate_venue_id: UUID
+
+
+class EligibilityData(BaseModel):
+    """Server-authoritative eligibility for a selected venue.
+
+    ``reason`` reuses engine vocabulary where possible:
+    ``eligible``, ``already_verified``, ``outside``, ``stale_evidence``,
+    ``observed_at_in_future``, ``accuracy_exceeds_venue_maximum``,
+    ``venue_inactive``, ``venue_not_found``.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    eligible: bool
+    reason: str
+    distance_meters: float | None = None
+    allowed_radius_meters: float | None = None
+    location_accuracy_meters: float
+    venue_id: UUID
+    observed_at: datetime
+
+
+class EligibilityResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    data: EligibilityData

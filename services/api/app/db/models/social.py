@@ -74,6 +74,7 @@ class CallingCard(Base):
     )
     reason_code: Mapped[str | None] = mapped_column(Text)
     reason_text: Mapped[str | None] = mapped_column(Text)
+    custom_message: Mapped[str | None] = mapped_column(Text)
     status: Mapped[str] = mapped_column(Text, nullable=False, server_default="pending")
     idempotency_key: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(

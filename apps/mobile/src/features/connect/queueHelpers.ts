@@ -258,9 +258,22 @@ export function formatExpiryCountdown(
   return `${seconds}s left`;
 }
 
+const REASON_LABELS: Record<string, string> = {
+  love_the_dance_moves: "Love the dance moves",
+  great_conversation: "Great conversation",
+  nice_style: "Nice style",
+  shared_vibe: "Shared vibe",
+  say_hello: "Say hello",
+};
+
 export function reasonCodeLabel(code: string): string {
-  return code
+  const normalized = code.trim().toLowerCase();
+  if (REASON_LABELS[normalized]) {
+    return REASON_LABELS[normalized];
+  }
+  return normalized
     .split("_")
+    .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
 }

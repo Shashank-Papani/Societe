@@ -147,7 +147,9 @@ async def test_whitespace_message_rejected(world: CallingCardWorld) -> None:
 
 
 @pytest.mark.asyncio
-async def test_block_disables_send_unblock_restores(world: CallingCardWorld) -> None:
+async def test_block_disables_send_unblock_does_not_restore_grant(
+    world: CallingCardWorld,
+) -> None:
     await accept_connection(world)
     now = datetime.now(UTC)
     service = messaging_service(world)
@@ -176,15 +178,21 @@ async def test_block_disables_send_unblock_restores(world: CallingCardWorld) -> 
     await world.service().unblock_user(
         user=world.sender, blocked_user_id=world.recipient_id, now=now + timedelta(seconds=2)
     )
-    enabled = await outbox_of_type(world, "conversation.messaging_enabled")
-    assert enabled
-    sent = await service.send_message(
-        user=world.sender,
-        conversation_id=conversation.id,
-        request=SendMessageRequest(body="back online", client_message_id=str(uuid4())),
-        now=now + timedelta(seconds=3),
-    )
-    assert sent.body == "back online"
+    # Unblock must not restore prior grants — messaging stays closed until a new connection.
+    with pytest.raises(AppError) as after:
+        await service.send_message(
+            user=world.sender,
+            conversation_id=conversation.id,
+            request=SendMessageRequest(body="still closed", client_message_id=str(uuid4())),
+            now=now + timedelta(seconds=3),
+        )
+    assert after.value.code in {
+        "MESSAGING_BLOCKED",
+        "MESSAGING_DISABLED",
+        "MESSAGING_NOT_ALLOWED",
+        "CONNECTION_REVOKED",
+        "CONNECTION_REQUIRED",
+    }
 
 
 @pytest.mark.asyncio
@@ -311,7 +319,11 @@ async def test_message_and_outbox_atomicity_identifiers_only(world: CallingCardW
     events = await world.session.scalars(
         select(OutboxEvent).where(OutboxEvent.event_type == "message.created")
     )
-    event = list(events)[-1]
+    matching = [
+        event for event in events if event.payload.get("conversation_id") == str(conversation.id)
+    ]
+    assert matching, "expected message.created outbox for this conversation"
+    event = matching[-1]
     assert event.payload["conversation_id"] == str(conversation.id)
     assert "message_id" in event.payload
     assert "preview" not in event.payload

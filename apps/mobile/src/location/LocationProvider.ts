@@ -1,8 +1,10 @@
 /**
  * Stable location provider interface for Phase 2.
- * Default implementation uses Expo Location (foreground only).
+ * Default implementation uses Expo Location (foreground).
  */
 import * as Location from "expo-location";
+
+import { offsetLatLng } from "@/features/presence/presenceRetention";
 
 export type ForegroundLocationSample = {
   latitude: number;
@@ -56,10 +58,75 @@ export class ExpoLocationProvider implements LocationProvider {
 
 let active: LocationProvider = new ExpoLocationProvider();
 
+/** __DEV__ only — when set, getCurrentSample returns this fixed reading. */
+let devLocationOverride: ForegroundLocationSample | null = null;
+/** Bumped whenever the fixture changes so stale async results can be ignored. */
+let locationEpoch = 0;
+
+export function getLocationEpoch(): number {
+  return locationEpoch;
+}
+
 export function getLocationProvider(): LocationProvider {
+  if (__DEV__ && devLocationOverride) {
+    return {
+      name: "dev-fixture",
+      requestForegroundPermission: async () => true,
+      getCurrentSample: async () => ({
+        ...devLocationOverride!,
+        observed_at: new Date().toISOString(),
+      }),
+    };
+  }
   return active;
 }
 
 export function setLocationProviderForTests(provider: LocationProvider): void {
   active = provider;
+}
+
+/**
+ * Development-only GPS override shared by eligibility + verify + heartbeat.
+ * Cleared automatically outside __DEV__.
+ */
+export function setDevLocationOverride(sample: ForegroundLocationSample | null): void {
+  if (!__DEV__) {
+    return;
+  }
+  locationEpoch += 1;
+  devLocationOverride = sample;
+}
+
+export type DevFixtureKind = "inside_entry" | "retention_only" | "outside_retention";
+
+const NEON_HOUSE = { latitude: 34.0955, longitude: -118.344 };
+
+/**
+ * Deterministic development fixtures relative to a venue centroid.
+ * Distances: ~30 m (entry), ~200 m (retention-only), ~300 m (outside).
+ */
+export function buildDevVenueFixture(
+  kind: DevFixtureKind,
+  origin: { latitude: number; longitude: number } = NEON_HOUSE,
+): ForegroundLocationSample {
+  const metersSouth =
+    kind === "inside_entry" ? 30 : kind === "retention_only" ? 200 : 300;
+  const point = offsetLatLng(origin, -metersSouth, 0);
+  return {
+    latitude: point.latitude,
+    longitude: point.longitude,
+    horizontal_accuracy_m: 8,
+    altitude_m: null,
+    speed_mps: null,
+    observed_at: new Date().toISOString(),
+    is_mock: true,
+    provider: "simulated",
+  };
+}
+
+export function applyDevVenueFixture(
+  kind: DevFixtureKind,
+  origin?: { latitude: number; longitude: number },
+): void {
+  setDevLocationOverride(buildDevVenueFixture(kind, origin));
 }

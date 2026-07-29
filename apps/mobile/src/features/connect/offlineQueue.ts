@@ -159,6 +159,7 @@ export async function enqueueCreateCallingCard(input: {
   recipientUserId: string;
   reasonCode?: string | null;
   reasonText?: string | null;
+  customMessage?: string | null;
   idempotencyKey: string;
   /** Business expiry hint; skipped after this timestamp. */
   expiresAt?: string | null;
@@ -171,6 +172,7 @@ export async function enqueueCreateCallingCard(input: {
       recipient_user_id: input.recipientUserId,
       reason_code: input.reasonCode ?? null,
       reason_text: input.reasonText ?? null,
+      custom_message: input.customMessage ?? null,
     },
   });
 }
@@ -350,15 +352,30 @@ async function executeOperation(op: QueuedOperation): Promise<{
   const payload = parseQueuePayload(op.payloadJson);
 
   if (op.operationType === "calling_card.create") {
-    const result = await createCallingCard(
-      {
-        recipientUserId: String(payload.recipient_user_id),
-        reasonCode: (payload.reason_code as string | null | undefined) ?? null,
-        reasonText: (payload.reason_text as string | null | undefined) ?? null,
-      },
-      op.idempotencyKey,
-    );
-    return { serverCardId: result.id, expiresAt: result.expires_at };
+    try {
+      const result = await createCallingCard(
+        {
+          recipientUserId: String(payload.recipient_user_id),
+          reasonCode: (payload.reason_code as string | null | undefined) ?? null,
+          reasonText: (payload.reason_text as string | null | undefined) ?? null,
+          customMessage:
+            (payload.custom_message as string | null | undefined) ?? null,
+        },
+        op.idempotencyKey,
+      );
+      return { serverCardId: result.id, expiresAt: result.expires_at };
+    } catch (error) {
+      // Already-active pending cards reconcile as success (idempotent send).
+      // Already-connected pairs reconcile to Connected without a new card.
+      if (
+        error instanceof ApiError &&
+        (error.code === "CALLING_CARD_ALREADY_ACTIVE" ||
+          error.code === "CALLING_CARD_ALREADY_CONNECTED")
+      ) {
+        return { serverCardId: null, expiresAt: null };
+      }
+      throw error;
+    }
   }
 
   if (op.operationType === "calling_card.respond") {

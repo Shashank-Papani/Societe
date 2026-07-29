@@ -86,6 +86,12 @@ components:
     CreateCallingCardRequest:
       additionalProperties: false
       properties:
+        custom_message:
+          anyOf:
+          - maxLength: 160
+            type: string
+          - type: 'null'
+          title: Custom Message
         reason_code:
           anyOf:
           - maxLength: 64
@@ -230,6 +236,42 @@ components:
       - installation_id
       title: DeviceCreate
       type: object
+    EligibilityRequest:
+      additionalProperties: false
+      description: Read-only proximity preview. Does not create leases or evidence
+        rows.
+      properties:
+        candidate_venue_id:
+          format: uuid
+          title: Candidate Venue Id
+          type: string
+        horizontal_accuracy_m:
+          maximum: 10000.0
+          minimum: 0.0
+          title: Horizontal Accuracy M
+          type: number
+        latitude:
+          maximum: 90.0
+          minimum: -90.0
+          title: Latitude
+          type: number
+        longitude:
+          maximum: 180.0
+          minimum: -180.0
+          title: Longitude
+          type: number
+        observed_at:
+          format: date-time
+          title: Observed At
+          type: string
+      required:
+      - latitude
+      - longitude
+      - horizontal_accuracy_m
+      - observed_at
+      - candidate_venue_id
+      title: EligibilityRequest
+      type: object
     EvidenceLocation:
       additionalProperties: false
       properties:
@@ -323,6 +365,51 @@ components:
           title: Detail
           type: array
       title: HTTPValidationError
+      type: object
+    HeartbeatRequest:
+      additionalProperties: false
+      description: Retention heartbeat evidence. Distance/eligibility are server-computed.
+      properties:
+        check_in_id:
+          anyOf:
+          - format: uuid
+            type: string
+          - type: 'null'
+          title: Check In Id
+        client_sequence:
+          minimum: 0.0
+          title: Client Sequence
+          type: integer
+        device_id:
+          format: uuid
+          title: Device Id
+          type: string
+        evidence_id:
+          format: uuid
+          title: Evidence Id
+          type: string
+        location:
+          $ref: '#/components/schemas/EvidenceLocation'
+        observed_at:
+          format: date-time
+          title: Observed At
+          type: string
+        platform_signals:
+          $ref: '#/components/schemas/PlatformSignals'
+        venue_id:
+          anyOf:
+          - format: uuid
+            type: string
+          - type: 'null'
+          title: Venue Id
+      required:
+      - evidence_id
+      - observed_at
+      - location
+      - platform_signals
+      - client_sequence
+      - device_id
+      title: HeartbeatRequest
       type: object
     LeaveRequest:
       additionalProperties: false
@@ -2470,6 +2557,41 @@ paths:
       summary: Complete Upload
       tags:
       - media
+  /v1/presence/eligibility:
+    post:
+      description: 'Read-only eligibility preview for the selected venue.
+
+
+        Does not create leases, evidence, or sample-buffer writes. The verify
+
+        mutation remains the only path that grants presence.'
+      operationId: evaluate_eligibility_v1_presence_eligibility_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EligibilityRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Evaluate Eligibility V1 Presence Eligibility Post
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Evaluate Eligibility
+      tags:
+      - presence
   /v1/presence/evidence:
     post:
       operationId: submit_evidence_v1_presence_evidence_post
@@ -2506,6 +2628,45 @@ paths:
       security:
       - HTTPBearer: []
       summary: Submit Evidence
+      tags:
+      - presence
+  /v1/presence/heartbeat:
+    post:
+      description: Renew or recheck active venue presence from location evidence.
+      operationId: presence_heartbeat_v1_presence_heartbeat_post
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Idempotency-Key
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HeartbeatRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Presence Heartbeat V1 Presence Heartbeat Post
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Presence Heartbeat
       tags:
       - presence
   /v1/presence/leave:

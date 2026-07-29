@@ -19,6 +19,10 @@ const venueCardSchema = z.object({
     longitude: z.number(),
   }),
   distance_m: z.number().optional(),
+  // Optional future / extended map fields — never invent client-side.
+  is_open: z.boolean().nullable().optional(),
+  packed_percent: z.number().nullable().optional(),
+  crowd_label: z.string().nullable().optional(),
 });
 
 const mapResponseSchema = z.object({

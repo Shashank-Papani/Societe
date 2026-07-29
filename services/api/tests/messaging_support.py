@@ -21,7 +21,10 @@ async def accept_connection(
     service = world.service()
     created = await service.create_calling_card(
         user=world.sender,
-        request=CreateCallingCardRequest(recipient_user_id=world.recipient_id),
+        request=CreateCallingCardRequest(
+            recipient_user_id=world.recipient_id,
+            reason_code="say_hello",
+        ),
         idempotency_key=str(uuid4()),
         now=moment,
     )

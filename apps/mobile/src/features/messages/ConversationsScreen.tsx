@@ -1,8 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
-  ActivityIndicator,
   FlatList,
   Pressable,
   RefreshControl,
@@ -10,28 +9,41 @@ import {
   Text,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useAuth } from "@/auth/AuthProvider";
+import { ProfileAvatar } from "@/features/connect/ProfileAvatar";
 import { fetchConversations, type ConversationSummary } from "@/features/messages/api";
+import {
+  conversationAccessibilityLabel,
+  conversationDisplayName,
+  conversationPreview,
+  formatConversationTimestamp,
+} from "@/features/messages/messagesPresentation";
+import { ConversationsSkeleton } from "@/features/messages/MessagesSkeleton";
+import {
+  MessagesEmptyState,
+  MessagesErrorState,
+} from "@/features/messages/MessagesStates";
 import { subscribeRealtime } from "@/realtime/client";
-
-function labelFor(item: ConversationSummary): string {
-  return (
-    item.other_participant.display_name ??
-    (item.other_participant.handle ? `@${item.other_participant.handle}` : "Connection")
-  );
-}
+import { colors, fontFamilies } from "@/theme";
 
 export function ConversationsScreen() {
   const auth = useAuth();
   const router = useRouter();
   const queryClient = useQueryClient();
+  const [nowMs, setNowMs] = useState(() => Date.now());
 
   const listQuery = useQuery({
     queryKey: ["messages", "conversations"],
     queryFn: () => fetchConversations(),
     enabled: auth.status === "authenticated",
   });
+
+  useEffect(() => {
+    const timer = setInterval(() => setNowMs(Date.now()), 60_000);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     if (auth.status !== "authenticated") {
@@ -49,89 +61,234 @@ export function ConversationsScreen() {
     });
   }, [auth.status, queryClient]);
 
+  const unreadTotal = (listQuery.data?.items ?? []).reduce(
+    (sum, item) => sum + (item.unread_count > 0 ? item.unread_count : 0),
+    0,
+  );
+
   return (
-    <View style={styles.container}>
-      <Text style={styles.brand}>Société</Text>
-      <Text style={styles.title}>Messages</Text>
-      <Text style={styles.subtitle}>Private chats after an accepted Calling Card</Text>
+    <SafeAreaView style={styles.safe} edges={["top", "left", "right"]} testID="conversations-screen">
+      <View style={styles.header}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          testID="conversations-back"
+          onPress={() => {
+            if (router.canGoBack()) {
+              router.back();
+              return;
+            }
+            router.replace("/(tabs)/connect");
+          }}
+          style={({ pressed }) => [styles.backBtn, pressed && styles.pressed]}
+        >
+          <Text style={styles.backText}>←</Text>
+        </Pressable>
+        <View style={styles.headerCopy}>
+          <Text style={styles.title} accessibilityRole="header">
+            Messages
+          </Text>
+          {unreadTotal > 0 ? (
+            <Text style={styles.unreadMeta}>{unreadTotal} unread</Text>
+          ) : null}
+        </View>
+      </View>
 
       {auth.status !== "authenticated" ? (
         <Text style={styles.help}>Sign in to view messages.</Text>
       ) : null}
 
-      {listQuery.isLoading ? <ActivityIndicator color="#9aa6bf" /> : null}
-      {listQuery.error ? (
-        <Text style={styles.error}>{(listQuery.error as Error).message}</Text>
+      {auth.status === "authenticated" && listQuery.isLoading ? (
+        <View style={styles.padded}>
+          <ConversationsSkeleton />
+        </View>
       ) : null}
 
-      <FlatList
-        data={listQuery.data?.items ?? []}
-        keyExtractor={(item) => item.id}
-        refreshControl={
-          <RefreshControl
-            refreshing={listQuery.isRefetching}
-            onRefresh={() => void listQuery.refetch()}
-            tintColor="#9aa6bf"
-          />
-        }
-        ListEmptyComponent={
-          !listQuery.isLoading ? (
-            <Text style={styles.help}>No conversations yet. Accept a Calling Card to start.</Text>
-          ) : null
-        }
-        renderItem={({ item }) => (
-          <Pressable
-            style={styles.row}
-            onPress={() => router.push(`/messages/${item.id}`)}
-          >
-            <View style={styles.rowHeader}>
-              <Text style={styles.author}>{labelFor(item)}</Text>
-              {item.unread_count > 0 ? (
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>{item.unread_count}</Text>
-                </View>
-              ) : null}
-            </View>
-            <Text style={styles.preview} numberOfLines={1}>
-              {item.last_message_preview ?? "No messages yet"}
-            </Text>
-            <Text style={styles.meta}>
-              {item.last_message_at
-                ? new Date(item.last_message_at).toLocaleString()
-                : item.messaging_allowed
-                  ? "Ready to message"
-                  : "Messaging unavailable"}
-            </Text>
-          </Pressable>
-        )}
+      {auth.status === "authenticated" && listQuery.isError ? (
+        <MessagesErrorState
+          title="Couldn’t load messages"
+          onRetry={() => {
+            void listQuery.refetch();
+          }}
+        />
+      ) : null}
+
+      {auth.status === "authenticated" && !listQuery.isLoading && !listQuery.isError ? (
+        <FlatList
+          data={listQuery.data?.items ?? []}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.list}
+          refreshControl={
+            <RefreshControl
+              refreshing={listQuery.isRefetching}
+              onRefresh={() => void listQuery.refetch()}
+              tintColor={colors.lime}
+            />
+          }
+          ListEmptyComponent={<MessagesEmptyState />}
+          renderItem={({ item }) => <ConversationRow item={item} nowMs={nowMs} />}
+        />
+      ) : null}
+    </SafeAreaView>
+  );
+}
+
+function ConversationRow({
+  item,
+  nowMs,
+}: {
+  item: ConversationSummary;
+  nowMs: number;
+}) {
+  const router = useRouter();
+  const name = conversationDisplayName(item);
+  const preview = conversationPreview(item);
+  const time = formatConversationTimestamp(item.last_message_at, nowMs);
+  const unread = item.unread_count > 0;
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={conversationAccessibilityLabel(item)}
+      testID={`conversation-row-${item.id}`}
+      onPress={() => router.push(`/messages/${item.id}`)}
+      style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+    >
+      <ProfileAvatar
+        displayName={name}
+        handle={item.other_participant.handle}
+        size={48}
       />
-    </View>
+      <View style={styles.rowCopy}>
+        <View style={styles.rowTop}>
+          <Text style={styles.name} numberOfLines={1}>
+            {name}
+          </Text>
+          {time ? <Text style={styles.time}>{time}</Text> : null}
+        </View>
+        <View style={styles.rowBottom}>
+          <Text
+            style={[styles.preview, unread && styles.previewUnread]}
+            numberOfLines={1}
+          >
+            {preview}
+          </Text>
+          {unread ? (
+            <View
+              style={styles.unreadDot}
+              accessibilityLabel={`${item.unread_count} unread`}
+              testID={`conversation-unread-${item.id}`}
+            >
+              <Text style={styles.unreadCount}>
+                {item.unread_count > 99 ? "99+" : String(item.unread_count)}
+              </Text>
+            </View>
+          ) : null}
+        </View>
+      </View>
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#0b1220", padding: 20, paddingTop: 56 },
-  brand: { color: "#f5f7fb", fontSize: 28, fontWeight: "700", letterSpacing: 0.5 },
-  title: { color: "#f5f7fb", fontSize: 22, fontWeight: "600", marginTop: 8 },
-  subtitle: { color: "#9aa6bf", marginTop: 4, marginBottom: 16 },
-  help: { color: "#9aa6bf", marginVertical: 12 },
-  error: { color: "#f87171", marginVertical: 8 },
-  row: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#1e293b",
-    paddingVertical: 14,
-  },
-  rowHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  author: { color: "#f5f7fb", fontSize: 16, fontWeight: "600" },
-  preview: { color: "#cbd5e1", marginTop: 4 },
-  meta: { color: "#6f7c99", marginTop: 4, fontSize: 12 },
-  badge: {
-    backgroundColor: "#334155",
-    borderRadius: 10,
-    minWidth: 22,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+  safe: { flex: 1, backgroundColor: colors.background },
+  header: {
+    flexDirection: "row",
     alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingTop: 4,
+    paddingBottom: 12,
   },
-  badgeText: { color: "#f5f7fb", fontSize: 12, fontWeight: "700" },
+  backBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surface,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+  },
+  backText: {
+    color: colors.textPrimary,
+    fontSize: 20,
+    fontFamily: fontFamilies.geistSemiBold,
+  },
+  headerCopy: { flex: 1, gap: 2 },
+  title: {
+    color: colors.textPrimary,
+    fontFamily: fontFamilies.instrumentSerif,
+    fontSize: 34,
+  },
+  unreadMeta: {
+    color: colors.lime,
+    fontFamily: fontFamilies.geistMedium,
+    fontSize: 12,
+  },
+  help: {
+    color: colors.textSecondary,
+    fontFamily: fontFamilies.geistRegular,
+    paddingHorizontal: 20,
+  },
+  padded: { paddingHorizontal: 20 },
+  list: { paddingHorizontal: 20, paddingBottom: 32, flexGrow: 1 },
+  row: {
+    minHeight: 72,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
+  rowCopy: { flex: 1, gap: 4 },
+  rowTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  rowBottom: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  name: {
+    flex: 1,
+    color: colors.textPrimary,
+    fontFamily: fontFamilies.geistSemiBold,
+    fontSize: 16,
+  },
+  time: {
+    color: colors.textSecondary,
+    fontFamily: fontFamilies.geistRegular,
+    fontSize: 12,
+  },
+  preview: {
+    flex: 1,
+    color: colors.textSecondary,
+    fontFamily: fontFamilies.geistRegular,
+    fontSize: 13,
+  },
+  previewUnread: {
+    color: colors.textPrimary,
+    fontFamily: fontFamilies.geistMedium,
+  },
+  unreadDot: {
+    minWidth: 22,
+    minHeight: 22,
+    borderRadius: 11,
+    paddingHorizontal: 6,
+    backgroundColor: colors.lime,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  unreadCount: {
+    color: colors.limeInk,
+    fontFamily: fontFamilies.geistBold,
+    fontSize: 11,
+  },
+  pressed: { opacity: 0.9 },
 });

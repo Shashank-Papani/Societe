@@ -44,6 +44,15 @@ class CheckIn(Base):
     verified_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     grace_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     lease_expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_valid_evidence_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_distance_meters: Mapped[float | None] = mapped_column()
+    last_location_accuracy_meters: Mapped[float | None] = mapped_column()
+    last_evidence_observed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    outside_confirmation_count: Mapped[int] = mapped_column(
+        SmallInteger, nullable=False, server_default="0"
+    )
+    first_outside_observed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_outside_observed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     exited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     exit_reason: Mapped[str | None] = mapped_column(Text)
     risk_reasons: Mapped[list[object]] = mapped_column(

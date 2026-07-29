@@ -113,8 +113,8 @@ export async function loadDevFixtureJpeg(): Promise<SelectedMediaAsset> {
     uri: destination,
     mimeType: "image/jpeg",
     byteSize: size,
-    width: asset.width || 64,
-    height: asset.height || 64,
+    width: asset.width || 800,
+    height: asset.height || 1000,
   });
   if (!validated.ok) {
     throw new Error(validated.message);

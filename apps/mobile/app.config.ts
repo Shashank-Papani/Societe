@@ -12,6 +12,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ios: {
     icon: "./assets/expo.icon",
     bundleIdentifier: "com.societe.app",
+    infoPlist: {
+      UIBackgroundModes: ["location"],
+    },
   },
   android: {
     package: "com.societe.app",
@@ -22,6 +25,13 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       monochromeImage: "./assets/images/android-icon-monochrome.png",
     },
     predictiveBackGestureEnabled: false,
+    permissions: [
+      "ACCESS_COARSE_LOCATION",
+      "ACCESS_FINE_LOCATION",
+      "ACCESS_BACKGROUND_LOCATION",
+      "FOREGROUND_SERVICE",
+      "FOREGROUND_SERVICE_LOCATION",
+    ],
   },
   web: {
     output: "static",
@@ -37,6 +47,11 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       {
         locationWhenInUsePermission:
           "Société uses your location to verify you are at a venue.",
+        locationAlwaysAndWhenInUsePermission:
+          "Allow background location so Société can keep your venue presence active and end it when you leave.",
+        isIosBackgroundLocationEnabled: true,
+        isAndroidBackgroundLocationEnabled: true,
+        isAndroidForegroundServiceEnabled: true,
       },
     ],
     [
