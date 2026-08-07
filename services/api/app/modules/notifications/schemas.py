@@ -109,16 +109,21 @@ class PushTokenDeleteResponse(StrictModel):
     device_id: UUID
 
 
+class RealtimeTicketRequest(StrictModel):
+    purpose: Literal["notifications", "calling_cards"]
+
+
 class RealtimeTicketResponse(StrictModel):
     ticket: str
     expires_in_seconds: int
-    websocket_path: str = "/v1/realtime/notifications"
-    # Clients must open WS /v1/realtime/notifications (no query ticket), then send:
+    purpose: Literal["notifications", "calling_cards"]
+    websocket_path: str
+    # Clients must open websocket_path (no query ticket/access_token), then send:
     # {"type": "authenticate", "ticket": "<one-time-ticket>"} as the first message.
 
 
 class RealtimeAuthenticateMessage(StrictModel):
-    """First client message on the notifications WebSocket."""
+    """First client message on a ticket-authenticated WebSocket."""
 
     type: Literal["authenticate"]
     ticket: str = Field(min_length=16, max_length=512)

@@ -9,6 +9,8 @@ import { fetchMe } from "@/auth/localAuth";
 import { resolveAuthGateDestination } from "@/features/auth/welcomeContent";
 import { ForegroundNotificationHost } from "@/features/notifications/ForegroundNotificationHost";
 import { ForegroundNotificationProvider } from "@/features/notifications/ForegroundNotificationProvider";
+import { NativeNotificationResponseHost } from "@/features/notifications/NativeNotificationResponseHost";
+import { NotificationsProvider } from "@/features/notifications/NotificationsProvider";
 import { PresenceRetentionProvider } from "@/features/presence/PresenceRetentionProvider";
 // TaskManager definitions must load at app startup.
 import "@/features/presence/backgroundPresenceTask";
@@ -66,23 +68,27 @@ export default function RootLayout() {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <PresenceRetentionProvider>
-          <ForegroundNotificationProvider>
-            <AuthGate>
-              <StatusBar style="light" />
-              <Stack screenOptions={{ headerShown: false }}>
-                <Stack.Screen name="(tabs)" />
-                <Stack.Screen name="auth/index" />
-                <Stack.Screen name="auth/email" />
-                <Stack.Screen name="auth/otp" />
-                <Stack.Screen name="onboarding" />
-                <Stack.Screen name="venue" options={{ headerShown: false }} />
-                <Stack.Screen name="messages" options={{ headerShown: false }} />
-                <Stack.Screen name="blocked-users" options={{ headerShown: false }} />
-                <Stack.Screen name="presence-map" options={{ headerShown: false }} />
-              </Stack>
-              <ForegroundNotificationHost />
-            </AuthGate>
-          </ForegroundNotificationProvider>
+          <NotificationsProvider>
+            <ForegroundNotificationProvider>
+              <AuthGate>
+                <StatusBar style="light" />
+                <Stack screenOptions={{ headerShown: false }}>
+                  <Stack.Screen name="(tabs)" />
+                  <Stack.Screen name="auth/index" />
+                  <Stack.Screen name="auth/email" />
+                  <Stack.Screen name="auth/otp" />
+                  <Stack.Screen name="onboarding" />
+                  <Stack.Screen name="venue" options={{ headerShown: false }} />
+                  <Stack.Screen name="messages" options={{ headerShown: false }} />
+                  <Stack.Screen name="blocked-users" options={{ headerShown: false }} />
+                  <Stack.Screen name="presence-map" options={{ headerShown: false }} />
+                  <Stack.Screen name="notifications" options={{ headerShown: false }} />
+                </Stack>
+                <ForegroundNotificationHost />
+                <NativeNotificationResponseHost />
+              </AuthGate>
+            </ForegroundNotificationProvider>
+          </NotificationsProvider>
         </PresenceRetentionProvider>
       </AuthProvider>
     </QueryClientProvider>

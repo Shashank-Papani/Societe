@@ -4,6 +4,9 @@ The API process hosts ``WS /v1/realtime/ws`` (no separate realtime_hub worker).
 Compose ``event-dispatcher`` publishes via ``LocalRealtimeHub`` into Valkey;
 this endpoint subscribes to ``realtime:user:{id}`` and forwards envelopes.
 
+Authentication uses a short-lived one-time realtime ticket (purpose=
+``calling_cards``). Secrets must never appear in the WebSocket URL.
+
 Clients must deduplicate by ``event_id`` on reconnect / at-least-once delivery.
 """
 
@@ -19,12 +22,12 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Request, WebSocket, WebSocketDisconnect
 from redis.asyncio import Redis
 
-from app.core.auth import get_identity_provider
 from app.core.auth.deps import CurrentUserContext, get_current_user
 from app.core.config import Settings, get_settings
 from app.core.errors import AppError
+from app.db.models import User
 from app.db.session import get_redis, get_session_factory
-from app.modules.identity.service import IdentityService
+from app.modules.notifications.tickets import authenticate_websocket_with_ticket
 from app.modules.realtime.ack import record_event_ack
 from app.modules.realtime.local import valkey_channel
 from app.shared.schemas import ApiMeta, success_response
@@ -39,50 +42,34 @@ def _meta(request: Request) -> ApiMeta:
     )
 
 
-def _extract_ws_token(websocket: WebSocket) -> str | None:
-    auth = websocket.headers.get("authorization")
-    if auth and auth.lower().startswith("bearer "):
-        return auth.split(" ", 1)[1].strip() or None
-    query_token = websocket.query_params.get("access_token")
-    if query_token:
-        return query_token
-    return None
-
-
-async def _authenticate_ws(websocket: WebSocket, settings: Settings) -> UUID:
-    token = _extract_ws_token(websocket)
-    if not token:
-        raise AppError("UNAUTHORIZED", "Bearer token required.", status_code=401)
-    provider = get_identity_provider(settings)
-    claims = await provider.verify_token(token)
-    factory = get_session_factory(settings)
-    async with factory() as session:
-        service = IdentityService(session)
-        user = await service.resolve_or_provision(claims.subject)
-        service.assert_active(user)
-        return user.id
-
-
 @router.websocket("/realtime/ws")
 async def realtime_ws(websocket: WebSocket) -> None:
     settings = get_settings()
     try:
-        user_id = await _authenticate_ws(websocket, settings)
+        user_id = await authenticate_websocket_with_ticket(
+            websocket, settings=settings, purpose="calling_cards"
+        )
     except AppError:
-        await websocket.close(code=4401)
         return
     except Exception:
-        await websocket.close(code=4401)
+        with contextlib.suppress(Exception):
+            await websocket.close(code=4401)
         return
 
-    await websocket.accept()
+    factory = get_session_factory(settings)
+    async with factory() as session:
+        user = await session.get(User, user_id)
+        if user is None or user.account_status != "active" or user.deleted_at is not None:
+            await websocket.close(code=4401)
+            return
+
     channel = f"user:{user_id}"
     topic = valkey_channel(channel)
     redis = get_redis(settings)
     pubsub = redis.pubsub()
     await pubsub.subscribe(topic)
 
-    # Hint for clients: envelopes are at-least-once; dedupe by event_id.
+    # Only after auth: subscription hint. Clients must dedupe by event_id.
     await websocket.send_json(
         {
             "type": "subscribed",

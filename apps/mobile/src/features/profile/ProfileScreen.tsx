@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "expo-router";
+import { useRouter, type Href } from "expo-router";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -175,6 +175,15 @@ export function ProfileScreen() {
               style={styles.buttonSecondary}
             >
               <Text style={styles.buttonSecondaryText}>Blocked Users</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Notification preferences"
+              testID="profile-notification-preferences"
+              onPress={() => router.push("/notifications/preferences" as Href)}
+              style={styles.buttonSecondary}
+            >
+              <Text style={styles.buttonSecondaryText}>Notification preferences</Text>
             </Pressable>
 
             <Text style={styles.label}>Devices</Text>

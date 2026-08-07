@@ -63,6 +63,15 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       },
     ],
     [
+      "expo-notifications",
+      {
+        // Phase 9B: permission requested contextually from Preferences, not at cold start.
+        icon: "./assets/images/icon.png",
+        color: "#B9F908",
+        defaultChannel: "default",
+      },
+    ],
+    [
       "expo-splash-screen",
       {
         backgroundColor: "#208AEF",

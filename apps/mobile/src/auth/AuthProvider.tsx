@@ -15,6 +15,8 @@ import {
 
 import { API_BASE_URL, type ApiEnvelope } from "@/api/client";
 import { clearActiveAuthSubject } from "@/auth/deviceStore";
+import { clearHandledNotificationResponses } from "@/features/notifications/notificationResponseDedupe";
+import { unregisterCurrentDevicePushToken } from "@/features/notifications/pushRegistration";
 import { clearPendingStoryUpload } from "@/features/stories/pendingStoryUpload";
 import {
   clearSessionTokens,
@@ -48,6 +50,7 @@ const PROTECTED_QUERY_PREFIXES = [
   "stories",
   "story-group",
   "official-posts",
+  "notifications",
 ] as const;
 
 let liveAccessToken: string | null = null;
@@ -84,9 +87,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [queryClient]);
 
   const clearSession = useCallback(async () => {
+    // Best-effort push unregister while tokens are still valid.
+    try {
+      await unregisterCurrentDevicePushToken();
+    } catch {
+      // Local cleanup must still complete.
+    }
     await clearSessionTokens();
     await clearActiveAuthSubject();
     await clearPendingStoryUpload();
+    clearHandledNotificationResponses();
     setAccessToken(null);
     setStatus("unauthenticated");
     clearProtectedQueries();

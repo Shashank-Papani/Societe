@@ -1389,6 +1389,19 @@ components:
           title: Category
       title: ReadAllNotificationsRequest
       type: object
+    RealtimeTicketRequest:
+      additionalProperties: false
+      properties:
+        purpose:
+          enum:
+          - notifications
+          - calling_cards
+          title: Purpose
+          type: string
+      required:
+      - purpose
+      title: RealtimeTicketRequest
+      type: object
     RecordStoryViewResponse:
       additionalProperties: false
       properties:
@@ -4793,6 +4806,12 @@ paths:
   /v1/realtime/tickets:
     post:
       operationId: create_ticket_v1_realtime_tickets_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RealtimeTicketRequest'
+        required: true
       responses:
         '200':
           content:
@@ -4802,6 +4821,12 @@ paths:
                 title: Response Create Ticket V1 Realtime Tickets Post
                 type: object
           description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
       security:
       - HTTPBearer: []
       summary: Create Ticket

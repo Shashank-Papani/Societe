@@ -11,7 +11,6 @@ from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request, WebSocket, WebSocketDisconnect
-from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth.deps import CurrentUserContext, get_current_user, get_db
@@ -24,16 +23,17 @@ from app.modules.notifications.schemas import (
     PreferencePatchRequest,
     PushTokenRegisterRequest,
     ReadAllNotificationsRequest,
-    RealtimeAuthenticateMessage,
+    RealtimeTicketRequest,
     RealtimeTicketResponse,
 )
 from app.modules.notifications.service import NotificationService
 from app.modules.notifications.tickets import (
     acquire_notification_connection_slot,
-    consume_realtime_ticket,
+    authenticate_websocket_with_ticket,
     create_realtime_ticket,
     notifications_channel,
     release_notification_connection_slot,
+    websocket_path_for_purpose,
 )
 from app.shared.schemas import ApiMeta, success_response
 
@@ -206,69 +206,28 @@ async def delete_push_token(
 @router.post("/realtime/tickets")
 async def create_ticket(
     request: Request,
+    body: RealtimeTicketRequest,
     settings: Annotated[Settings, Depends(get_settings)],
     ctx: Annotated[CurrentUserContext, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_db)],
 ) -> dict[str, Any]:
     IdentityService(session).assert_active(ctx.user)
     redis = get_redis(settings)
-    ticket, ttl = await create_realtime_ticket(redis, user_id=ctx.user.id, settings=settings)
-    data = RealtimeTicketResponse(ticket=ticket, expires_in_seconds=ttl)
+    ticket, ttl = await create_realtime_ticket(
+        redis,
+        user_id=ctx.user.id,
+        settings=settings,
+        purpose=body.purpose,
+    )
+    data = RealtimeTicketResponse(
+        ticket=ticket,
+        expires_in_seconds=ttl,
+        purpose=body.purpose,
+        websocket_path=websocket_path_for_purpose(body.purpose),
+    )
     return success_response(data.model_dump(mode="json"), meta=_meta(request)).model_dump(
         mode="json"
     )
-
-
-async def _authenticate_notifications_ws(
-    websocket: WebSocket,
-    *,
-    settings: Settings,
-) -> UUID:
-    """Accept the socket, then require a first-message one-time ticket.
-
-    The ticket must never appear in the WebSocket URL (proxy/access logs).
-    No notification payloads are sent before successful authentication.
-    """
-    # Reject legacy URL transports that would leak secrets into access logs.
-    if websocket.query_params.get("ticket") or websocket.query_params.get("access_token"):
-        await websocket.close(code=4401)
-        raise AppError("REALTIME_TICKET_INVALID", "Realtime ticket is invalid.", status_code=401)
-
-    await websocket.accept()
-    timeout = float(settings.notification_ws_auth_timeout_seconds)
-    try:
-        raw = await asyncio.wait_for(websocket.receive_text(), timeout=timeout)
-    except TimeoutError as exc:
-        await websocket.close(code=4401)
-        raise AppError(
-            "REALTIME_TICKET_EXPIRED",
-            "Realtime authentication timed out.",
-            status_code=401,
-        ) from exc
-    except WebSocketDisconnect as exc:
-        raise AppError(
-            "REALTIME_TICKET_INVALID",
-            "Realtime ticket is invalid.",
-            status_code=401,
-        ) from exc
-
-    try:
-        payload = json.loads(raw)
-        auth = RealtimeAuthenticateMessage.model_validate(payload)
-    except (json.JSONDecodeError, ValidationError, TypeError) as exc:
-        await websocket.close(code=4401)
-        raise AppError(
-            "REALTIME_TICKET_INVALID",
-            "Realtime ticket is invalid.",
-            status_code=401,
-        ) from exc
-
-    redis = get_redis(settings)
-    try:
-        return await consume_realtime_ticket(redis, ticket=auth.ticket)
-    except AppError:
-        await websocket.close(code=4401)
-        raise
 
 
 @router.websocket("/realtime/notifications")
@@ -282,7 +241,9 @@ async def notifications_ws(websocket: WebSocket) -> None:
     topic: str | None = None
 
     try:
-        user_id = await _authenticate_notifications_ws(websocket, settings=settings)
+        user_id = await authenticate_websocket_with_ticket(
+            websocket, settings=settings, purpose="notifications"
+        )
     except AppError:
         return
     except Exception:

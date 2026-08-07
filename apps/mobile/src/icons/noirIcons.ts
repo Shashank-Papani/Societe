@@ -26,6 +26,10 @@ export const noirIcons = {
 
   profileLime: require("../../assets/icons/noir/png/lime/48/profile.png"),
   profileMuted: require("../../assets/icons/noir/png/muted/48/profile.png"),
+
+  notificationsWhite: require("../../assets/icons/noir/png/white/48/notifications.png"),
+  notificationsLime: require("../../assets/icons/noir/png/lime/48/notifications.png"),
+  notificationsMuted: require("../../assets/icons/noir/png/muted/48/notifications.png"),
 } as const;
 
 export type NoirIconKey = keyof typeof noirIcons;

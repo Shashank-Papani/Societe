@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from typing import Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from calling_cards_support import CallingCardWorld, build_calling_card_world
@@ -18,6 +18,7 @@ from app.core.config import get_settings
 from app.core.security import create_access_token
 from app.db.models import OutboxEvent
 from app.db.session import get_redis
+from app.modules.notifications.tickets import create_realtime_ticket
 from app.modules.realtime.ack import has_event_ack, record_event_ack
 from app.modules.realtime.factory import (
     build_push_publisher,
@@ -212,17 +213,110 @@ def test_ack_endpoint_and_openapi(client: TestClient) -> None:
 
 
 def test_websocket_requires_auth(client: TestClient) -> None:
+    # Socket may accept, but no user-specific data without a valid ticket.
+    with client.websocket_connect("/v1/realtime/ws") as ws:
+        ws.send_json({"type": "authenticate", "ticket": "x" * 32})
+        with pytest.raises(WebSocketDisconnect) as exc:
+            ws.receive_json()
+        assert exc.value.code == 4401
+
+
+def test_websocket_rejects_access_token_query(client: TestClient) -> None:
+    from starlette.testclient import WebSocketDenialResponse
+
+    token = client.post("/v1/auth/local/token", json={}).json()["data"]["access_token"]
     with pytest.raises((WebSocketDenialResponse, WebSocketDisconnect, RuntimeError)):
-        with client.websocket_connect("/v1/realtime/ws"):
+        with client.websocket_connect(f"/v1/realtime/ws?access_token={token}"):
             pass
 
 
-def test_websocket_subscribes_with_bearer(client: TestClient) -> None:
+def test_websocket_rejects_ticket_query(client: TestClient) -> None:
+    from starlette.testclient import WebSocketDenialResponse
+
+    with pytest.raises((WebSocketDenialResponse, WebSocketDisconnect, RuntimeError)):
+        with client.websocket_connect(f"/v1/realtime/ws?ticket={uuid4().hex}"):
+            pass
+
+
+def test_websocket_rejects_bearer_header_without_ticket(client: TestClient) -> None:
     token = client.post("/v1/auth/local/token", json={}).json()["data"]["access_token"]
+    # Bearer alone must not authenticate; ticket first-frame is required.
     with client.websocket_connect(
         "/v1/realtime/ws",
         headers={"Authorization": f"Bearer {token}"},
     ) as ws:
+        ws.send_json({"type": "authenticate", "ticket": "x" * 32})
+        with pytest.raises(WebSocketDisconnect) as exc:
+            ws.receive_json()
+        assert exc.value.code == 4401
+
+
+@pytest.mark.asyncio
+async def test_websocket_ticket_auth_flow(
+    client: TestClient, caplog: pytest.LogCaptureFixture
+) -> None:
+    import logging
+
+    settings = get_settings()
+    token = client.post("/v1/auth/local/token", json={}).json()["data"]["access_token"]
+    me = client.get("/v1/me", headers={"Authorization": f"Bearer {token}"}).json()["data"]
+    user_id = UUID(me["id"])
+    redis = get_redis(settings)
+    ticket, _ = await create_realtime_ticket(
+        redis, user_id=user_id, settings=settings, purpose="calling_cards"
+    )
+
+    with caplog.at_level(logging.DEBUG):
+        with client.websocket_connect("/v1/realtime/ws") as ws:
+            ws.send_json({"type": "authenticate", "ticket": ticket})
+            hello = ws.receive_json()
+            assert hello["type"] == "subscribed"
+            assert hello["channel"] == f"user:{user_id}"
+            assert "deduplicate" in hello["note"].lower()
+
+    assert ticket not in "\n".join(r.message for r in caplog.records)
+
+    # Reused ticket rejected.
+    with pytest.raises((WebSocketDenialResponse, WebSocketDisconnect, RuntimeError)):
+        with client.websocket_connect("/v1/realtime/ws") as ws:
+            ws.send_json({"type": "authenticate", "ticket": ticket})
+            ws.receive_json()
+
+
+@pytest.mark.asyncio
+async def test_websocket_rejects_notifications_purpose_ticket(client: TestClient) -> None:
+    settings = get_settings()
+    token = client.post("/v1/auth/local/token", json={}).json()["data"]["access_token"]
+    me = client.get("/v1/me", headers={"Authorization": f"Bearer {token}"}).json()["data"]
+    user_id = UUID(me["id"])
+    redis = get_redis(settings)
+    ticket, _ = await create_realtime_ticket(
+        redis, user_id=user_id, settings=settings, purpose="notifications"
+    )
+    with client.websocket_connect("/v1/realtime/ws") as ws:
+        ws.send_json({"type": "authenticate", "ticket": ticket})
+        with pytest.raises(WebSocketDisconnect) as exc:
+            ws.receive_json()
+        assert exc.value.code == 4401
+
+
+def test_websocket_subscribes_with_scoped_ticket(client: TestClient) -> None:
+    """HTTP ticket endpoint + clean WS URL (no secrets in query)."""
+    token = client.post("/v1/auth/local/token", json={}).json()["data"]["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    issued = client.post(
+        "/v1/realtime/tickets",
+        headers=headers,
+        json={"purpose": "calling_cards"},
+    )
+    assert issued.status_code == 200
+    data = issued.json()["data"]
+    assert data["websocket_path"] == "/v1/realtime/ws"
+    assert "access_token" not in data
+    ticket = data["ticket"]
+
+    with client.websocket_connect("/v1/realtime/ws") as ws:
+        ws.send_json({"type": "authenticate", "ticket": ticket})
         hello = ws.receive_json()
         assert hello["type"] == "subscribed"
         assert hello["channel"].startswith("user:")

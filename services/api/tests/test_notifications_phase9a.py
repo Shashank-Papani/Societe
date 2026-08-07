@@ -727,42 +727,78 @@ async def test_disabled_push_creates_no_delivery(world: CallingCardWorld) -> Non
 @pytest.mark.asyncio
 async def test_realtime_ticket_hash_single_use_expiry(world: CallingCardWorld) -> None:
     ticket, ttl = await create_realtime_ticket(
-        world.redis, user_id=world.recipient_id, settings=world.settings
+        world.redis,
+        user_id=world.recipient_id,
+        settings=world.settings,
+        purpose="notifications",
     )
     assert ttl == world.settings.notification_realtime_ticket_ttl_seconds
     digest = hashlib.sha256(ticket.encode()).hexdigest()
     stored = await world.redis.get(f"realtime:ticket:{digest}")
-    assert stored == str(world.recipient_id)
+    assert stored == f"{world.recipient_id}:notifications"
     # plaintext ticket must not be the redis key
     assert await world.redis.get(f"realtime:ticket:{ticket}") is None
 
-    user_id = await consume_realtime_ticket(world.redis, ticket=ticket)
+    user_id = await consume_realtime_ticket(world.redis, ticket=ticket, purpose="notifications")
     assert user_id == world.recipient_id
     with pytest.raises(AppError) as exc:
-        await consume_realtime_ticket(world.redis, ticket=ticket)
+        await consume_realtime_ticket(world.redis, ticket=ticket, purpose="notifications")
     assert exc.value.code in {"REALTIME_TICKET_EXPIRED", "REALTIME_TICKET_INVALID"}
 
     short_ticket, _ = await create_realtime_ticket(
-        world.redis, user_id=world.recipient_id, settings=world.settings
+        world.redis,
+        user_id=world.recipient_id,
+        settings=world.settings,
+        purpose="notifications",
     )
     digest2 = hashlib.sha256(short_ticket.encode()).hexdigest()
     await world.redis.expire(f"realtime:ticket:{digest2}", 0)
     with pytest.raises(AppError):
-        await consume_realtime_ticket(world.redis, ticket=short_ticket)
+        await consume_realtime_ticket(world.redis, ticket=short_ticket, purpose="notifications")
+
+
+@pytest.mark.asyncio
+async def test_realtime_ticket_purpose_isolation(world: CallingCardWorld) -> None:
+    ticket, _ = await create_realtime_ticket(
+        world.redis,
+        user_id=world.recipient_id,
+        settings=world.settings,
+        purpose="notifications",
+    )
+    with pytest.raises(AppError) as exc:
+        await consume_realtime_ticket(world.redis, ticket=ticket, purpose="calling_cards")
+    assert exc.value.code == "REALTIME_TICKET_INVALID"
+    # Wrong-purpose consume still burns the one-time ticket.
+    with pytest.raises(AppError):
+        await consume_realtime_ticket(world.redis, ticket=ticket, purpose="notifications")
 
 
 @pytest.mark.asyncio
 async def test_realtime_ticket_http(client) -> None:
     headers = auth_headers(client, persona="alpha")
-    resp = client.post("/v1/realtime/tickets", headers=headers)
+    resp = client.post(
+        "/v1/realtime/tickets",
+        headers=headers,
+        json={"purpose": "notifications"},
+    )
     assert resp.status_code == 200
     data = resp.json()["data"]
     assert "ticket" in data
     assert data["expires_in_seconds"] == 60
+    assert data["purpose"] == "notifications"
     assert data["websocket_path"] == "/v1/realtime/notifications"
     assert "access_token" not in data
     assert "?" not in data["websocket_path"]
     assert "ticket=" not in data["websocket_path"]
+
+    cc = client.post(
+        "/v1/realtime/tickets",
+        headers=headers,
+        json={"purpose": "calling_cards"},
+    )
+    assert cc.status_code == 200
+    assert cc.json()["data"]["websocket_path"] == "/v1/realtime/ws"
+    assert cc.json()["data"]["purpose"] == "calling_cards"
 
 
 def test_notifications_ws_rejects_ticket_in_url(client) -> None:
@@ -814,7 +850,10 @@ async def test_notifications_ws_first_message_auth_flow(
     await world.session.commit()
 
     ticket, _ = await create_realtime_ticket(
-        world.redis, user_id=world.recipient_id, settings=world.settings
+        world.redis,
+        user_id=world.recipient_id,
+        settings=world.settings,
+        purpose="notifications",
     )
     assert "ticket=" not in "/v1/realtime/notifications"
 
@@ -863,7 +902,10 @@ async def test_notifications_ws_expired_ticket(world: CallingCardWorld, client) 
     from starlette.websockets import WebSocketDisconnect
 
     ticket, _ = await create_realtime_ticket(
-        world.redis, user_id=world.recipient_id, settings=world.settings
+        world.redis,
+        user_id=world.recipient_id,
+        settings=world.settings,
+        purpose="notifications",
     )
     digest = hashlib.sha256(ticket.encode()).hexdigest()
     await world.redis.expire(f"realtime:ticket:{digest}", 0)
@@ -894,7 +936,10 @@ async def test_notifications_ws_binds_to_ticket_owner(world: CallingCardWorld, c
     )
     await world.session.commit()
     ticket, _ = await create_realtime_ticket(
-        world.redis, user_id=world.recipient_id, settings=world.settings
+        world.redis,
+        user_id=world.recipient_id,
+        settings=world.settings,
+        purpose="notifications",
     )
     with client.websocket_connect("/v1/realtime/notifications") as ws:
         ws.send_json({"type": "authenticate", "ticket": ticket})
@@ -903,6 +948,25 @@ async def test_notifications_ws_binds_to_ticket_owner(world: CallingCardWorld, c
         # Snapshot is for ticket owner (recipient), not an unauthenticated caller.
         assert isinstance(first["payload"]["total"], int)
         assert first["payload"]["total"] >= 1
+
+
+@pytest.mark.asyncio
+async def test_notifications_ws_rejects_calling_cards_purpose_ticket(
+    world: CallingCardWorld, client
+) -> None:
+    from starlette.websockets import WebSocketDisconnect
+
+    ticket, _ = await create_realtime_ticket(
+        world.redis,
+        user_id=world.recipient_id,
+        settings=world.settings,
+        purpose="calling_cards",
+    )
+    with client.websocket_connect("/v1/realtime/notifications") as ws:
+        ws.send_json({"type": "authenticate", "ticket": ticket})
+        with pytest.raises(WebSocketDisconnect) as exc:
+            ws.receive_json()
+        assert exc.value.code == 4401
 
 
 @pytest.mark.asyncio

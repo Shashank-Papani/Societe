@@ -26,6 +26,7 @@
     "expo-linear-gradient": "~57.0.1",
     "expo-linking": "~57.0.4",
     "expo-location": "^57.0.6",
+    "expo-notifications": "~57.0.9",
     "expo-router": "~57.0.8",
     "expo-secure-store": "~57.0.1",
     "expo-splash-screen": "~57.0.5",
@@ -61,6 +62,6 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test src/features/experience/mediaValidation.test.ts src/features/experience/vibeLifecycle.test.ts src/features/experience/vibeMedia.test.ts src/features/connect/queueHelpers.test.ts src/features/connect/connectPresentation.test.ts src/features/connect/callingCardComposer.test.ts src/features/messages/messageHelpers.test.ts src/features/messages/messagesPresentation.test.ts src/auth/deviceKeys.test.ts src/auth/emailValidation.test.ts src/auth/deviceKeyMigration.test.ts src/features/profile/profilePhotoUi.test.ts src/features/profile/profilePhotoCropMath.test.ts src/features/profile/blockedUsersUi.test.ts src/features/auth/welcomeContent.test.ts src/features/discover/discoverPresentation.test.ts src/features/venue/venuePresentation.test.ts src/features/venue/venueImage.test.ts src/features/presence/presenceErrors.test.ts src/features/presence/presencePresentation.test.ts src/features/presence/presenceEligibility.test.ts src/features/presence/presenceRetention.test.ts src/theme/designSystem.test.ts src/navigation/tabBar.test.ts src/features/stories/storyContracts.test.ts src/features/stories/storyUiContracts.test.ts src/features/stories/storyVideoPlayback.test.ts"
+    "test": "node --experimental-strip-types --test src/features/experience/mediaValidation.test.ts src/features/experience/vibeLifecycle.test.ts src/features/experience/vibeMedia.test.ts src/features/connect/queueHelpers.test.ts src/features/connect/connectPresentation.test.ts src/features/connect/callingCardComposer.test.ts src/features/messages/messageHelpers.test.ts src/features/messages/messagesPresentation.test.ts src/auth/deviceKeys.test.ts src/auth/emailValidation.test.ts src/auth/deviceKeyMigration.test.ts src/features/profile/profilePhotoUi.test.ts src/features/profile/profilePhotoCropMath.test.ts src/features/profile/blockedUsersUi.test.ts src/features/auth/welcomeContent.test.ts src/features/discover/discoverPresentation.test.ts src/features/venue/venuePresentation.test.ts src/features/venue/venueImage.test.ts src/features/presence/presenceErrors.test.ts src/features/presence/presencePresentation.test.ts src/features/presence/presenceEligibility.test.ts src/features/presence/presenceRetention.test.ts src/theme/designSystem.test.ts src/navigation/tabBar.test.ts src/features/stories/storyContracts.test.ts src/features/stories/storyUiContracts.test.ts src/features/stories/storyVideoPlayback.test.ts src/features/notifications/notificationContracts.test.ts src/features/notifications/deepLinks.test.ts src/features/notifications/realtimeSecurity.test.ts src/features/notifications/notificationUiContracts.test.ts src/realtime/callingCardsRealtime.test.ts"
   }
 }

@@ -116,6 +116,7 @@ export function DiscoverScreen() {
         title="Discover"
         location={city}
         showSettings
+        showNotifications
         testID="discover-header"
         locationTestID="discover-city"
       />

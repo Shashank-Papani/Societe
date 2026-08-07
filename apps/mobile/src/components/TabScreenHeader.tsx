@@ -3,6 +3,7 @@ import { useRouter } from "expo-router";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { canChangeDiscoverCity } from "@/features/discover/discoverPresentation";
+import { NotificationBellButton } from "@/features/notifications/NotificationBellButton";
 import { noirIcons } from "@/icons/noirIcons";
 import { fontFamilies } from "@/theme";
 
@@ -20,6 +21,8 @@ type Props = {
   location: string;
   /** When true, renders the Discover settings gear. */
   showSettings?: boolean;
+  /** When true, renders the notification bell + unread badge. */
+  showNotifications?: boolean;
   testID?: string;
   locationTestID?: string;
 };
@@ -31,11 +34,13 @@ export function TabScreenHeader({
   title,
   location,
   showSettings = false,
+  showNotifications = false,
   testID,
   locationTestID,
 }: Props) {
   const router = useRouter();
   const citySelectable = canChangeDiscoverCity();
+  const hasActions = showSettings || showNotifications;
 
   return (
     <View style={styles.header} testID={testID}>
@@ -58,22 +63,27 @@ export function TabScreenHeader({
           ) : null}
         </View>
       </View>
-      {showSettings ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Open settings"
-          testID="discover-settings-button"
-          onPress={() => router.push("/(tabs)/profile")}
-          style={({ pressed }) => [styles.settingsButton, pressed && styles.pressed]}
-        >
-          <Image
-            source={noirIcons.settingsWhite}
-            style={styles.settingsIcon}
-            contentFit="contain"
-            accessibilityIgnoresInvertColors
-            testID="discover-settings-icon"
-          />
-        </Pressable>
+      {hasActions ? (
+        <View style={styles.actions}>
+          {showNotifications ? <NotificationBellButton /> : null}
+          {showSettings ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Open settings"
+              testID="discover-settings-button"
+              onPress={() => router.push("/(tabs)/profile")}
+              style={({ pressed }) => [styles.settingsButton, pressed && styles.pressed]}
+            >
+              <Image
+                source={noirIcons.settingsWhite}
+                style={styles.settingsIcon}
+                contentFit="contain"
+                accessibilityIgnoresInvertColors
+                testID="discover-settings-icon"
+              />
+            </Pressable>
+          ) : null}
+        </View>
       ) : (
         <View style={styles.settingsSpacer} />
       )}
@@ -114,6 +124,11 @@ const styles = StyleSheet.create({
   cityChevron: {
     width: 14,
     height: 14,
+  },
+  actions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   settingsButton: {
     width: 44,
