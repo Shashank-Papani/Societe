@@ -1239,6 +1239,39 @@ components:
       - app_state
       title: PlatformSignals
       type: object
+    PreferencePatchItem:
+      additionalProperties: false
+      properties:
+        category:
+          title: Category
+          type: string
+        in_app_enabled:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: In App Enabled
+        push_enabled:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Push Enabled
+      required:
+      - category
+      title: PreferencePatchItem
+      type: object
+    PreferencePatchRequest:
+      additionalProperties: false
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/PreferencePatchItem'
+          minItems: 1
+          title: Items
+          type: array
+      required:
+      - items
+      title: PreferencePatchRequest
+      type: object
     PrivacyPatch:
       additionalProperties: false
       properties:
@@ -1328,6 +1361,33 @@ components:
       - mime_type
       - byte_size
       title: ProfilePhotoUploadBody
+      type: object
+    PushTokenRegisterRequest:
+      additionalProperties: false
+      properties:
+        provider:
+          const: expo
+          title: Provider
+          type: string
+        token:
+          maxLength: 4096
+          minLength: 8
+          title: Token
+          type: string
+      required:
+      - provider
+      - token
+      title: PushTokenRegisterRequest
+      type: object
+    ReadAllNotificationsRequest:
+      additionalProperties: false
+      properties:
+        category:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Category
+      title: ReadAllNotificationsRequest
       type: object
     RecordStoryViewResponse:
       additionalProperties: false
@@ -3298,6 +3358,122 @@ paths:
       summary: Delete Device
       tags:
       - identity
+  /v1/me/devices/{device_id}/push-token:
+    delete:
+      operationId: delete_push_token_v1_me_devices__device_id__push_token_delete
+      parameters:
+      - in: path
+        name: device_id
+        required: true
+        schema:
+          format: uuid
+          title: Device Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Delete Push Token V1 Me Devices  Device Id  Push Token
+                  Delete
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Delete Push Token
+      tags:
+      - notifications
+    put:
+      operationId: register_push_token_v1_me_devices__device_id__push_token_put
+      parameters:
+      - in: path
+        name: device_id
+        required: true
+        schema:
+          format: uuid
+          title: Device Id
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PushTokenRegisterRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Register Push Token V1 Me Devices  Device Id  Push
+                  Token Put
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Register Push Token
+      tags:
+      - notifications
+  /v1/me/notification-preferences:
+    get:
+      operationId: get_notification_preferences_v1_me_notification_preferences_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Get Notification Preferences V1 Me Notification Preferences
+                  Get
+                type: object
+          description: Successful Response
+      security:
+      - HTTPBearer: []
+      summary: Get Notification Preferences
+      tags:
+      - notifications
+    patch:
+      operationId: patch_notification_preferences_v1_me_notification_preferences_patch
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PreferencePatchRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Patch Notification Preferences V1 Me Notification
+                  Preferences Patch
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Patch Notification Preferences
+      tags:
+      - notifications
   /v1/me/onboarding:
     get:
       operationId: get_onboarding_v1_me_onboarding_get
@@ -3808,6 +3984,174 @@ paths:
       summary: Complete Upload
       tags:
       - media
+  /v1/notifications:
+    get:
+      operationId: list_notifications_v1_notifications_get
+      parameters:
+      - in: query
+        name: cursor
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Cursor
+      - in: query
+        name: limit
+        required: false
+        schema:
+          default: 20
+          maximum: 50
+          minimum: 1
+          title: Limit
+          type: integer
+      - in: query
+        name: unread_only
+        required: false
+        schema:
+          default: false
+          title: Unread Only
+          type: boolean
+      - in: query
+        name: category
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Category
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response List Notifications V1 Notifications Get
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: List Notifications
+      tags:
+      - notifications
+  /v1/notifications/read-all:
+    post:
+      operationId: mark_all_read_v1_notifications_read_all_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              anyOf:
+              - $ref: '#/components/schemas/ReadAllNotificationsRequest'
+              - type: 'null'
+              title: Body
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Mark All Read V1 Notifications Read All Post
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Mark All Read
+      tags:
+      - notifications
+  /v1/notifications/unread-count:
+    get:
+      operationId: unread_count_v1_notifications_unread_count_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Unread Count V1 Notifications Unread Count Get
+                type: object
+          description: Successful Response
+      security:
+      - HTTPBearer: []
+      summary: Unread Count
+      tags:
+      - notifications
+  /v1/notifications/{notification_id}:
+    delete:
+      operationId: dismiss_notification_v1_notifications__notification_id__delete
+      parameters:
+      - in: path
+        name: notification_id
+        required: true
+        schema:
+          format: uuid
+          title: Notification Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Dismiss Notification V1 Notifications  Notification
+                  Id  Delete
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Dismiss Notification
+      tags:
+      - notifications
+  /v1/notifications/{notification_id}/read:
+    post:
+      operationId: mark_notification_read_v1_notifications__notification_id__read_post
+      parameters:
+      - in: path
+        name: notification_id
+        required: true
+        schema:
+          format: uuid
+          title: Notification Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Mark Notification Read V1 Notifications  Notification
+                  Id  Read Post
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Mark Notification Read
+      tags:
+      - notifications
   /v1/official-posts/{post_id}:
     delete:
       operationId: delete_official_post_route_v1_official_posts__post_id__delete
@@ -4446,6 +4790,23 @@ paths:
       summary: Get Presence Me
       tags:
       - presence
+  /v1/realtime/tickets:
+    post:
+      operationId: create_ticket_v1_realtime_tickets_post
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Create Ticket V1 Realtime Tickets Post
+                type: object
+          description: Successful Response
+      security:
+      - HTTPBearer: []
+      summary: Create Ticket
+      tags:
+      - notifications
   /v1/stories/uploads:
     post:
       operationId: create_user_story_upload_v1_stories_uploads_post

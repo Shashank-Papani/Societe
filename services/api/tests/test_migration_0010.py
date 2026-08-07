@@ -1,7 +1,7 @@
 """Migration 0010_venue_organizations integrity checks.
 
 Phase 7A lands as a linear revision. The live Alembic head may advance in
-later phases (currently 0011); this module still documents the 0009 → 0010
+later phases (currently 0012); this module still documents the 0009 → 0010
 chain and that 0010 remains a single ancestor, not a branch.
 """
 
@@ -17,7 +17,7 @@ import pytest
 API_ROOT = Path(__file__).resolve().parents[1]
 REVISION = "0010_venue_organizations"
 DOWN_REVISION = "0009_presence_retention"
-CURRENT_HEAD = "0011_stories_official_content"
+CURRENT_HEAD = "0012_notifications_realtime"
 
 
 def _alembic_env() -> dict[str, str]:
@@ -41,7 +41,7 @@ def _run_alembic(*args: str) -> subprocess.CompletedProcess[str]:
 
 
 def test_alembic_heads_is_exactly_one() -> None:
-    """The migration graph must remain a single head (now Phase 8A)."""
+    """The migration graph must remain a single head (now Phase 9A)."""
     result = _run_alembic("heads")
     assert result.returncode == 0, result.stderr or result.stdout
     heads = [
@@ -99,7 +99,7 @@ def test_upgrade_to_head_when_database_available() -> None:
             "downgrade/upgrade round-trip through 0010_venue_organizations."
         )
 
-    # Round-trip through 0010, then restore head (0011).
+    # Round-trip through 0010, then restore head (0012).
     down = _run_alembic("downgrade", REVISION)
     assert down.returncode == 0, down.stderr or down.stdout
     at_0010 = _run_alembic("current")

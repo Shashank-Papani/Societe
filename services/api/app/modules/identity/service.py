@@ -471,6 +471,9 @@ class IdentityService:
             raise AppError("DEVICE_NOT_FOUND", "Device not found.", status_code=404)
         if device.revoked_at is None:
             device.revoked_at = datetime.now(UTC)
+            from app.modules.notifications.push import disable_device_push
+
+            disable_device_push(device, now=datetime.now(UTC))
             if sessions is not None:
                 await sessions.revoke_device_sessions(user_id=user.id, device_id=device_id)
             await self._repo.save()

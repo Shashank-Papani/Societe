@@ -1,4 +1,8 @@
-"""Migration 0011_stories_official_content integrity checks."""
+"""Migration 0011_stories_official_content integrity checks.
+
+Phase 8A revision. The live Alembic head may advance in later phases
+(currently 0012); this module still documents the 0010 → 0011 chain.
+"""
 
 from __future__ import annotations
 
@@ -12,6 +16,7 @@ import pytest
 API_ROOT = Path(__file__).resolve().parents[1]
 REVISION = "0011_stories_official_content"
 DOWN_REVISION = "0010_venue_organizations"
+CURRENT_HEAD = "0012_notifications_realtime"
 
 
 def _alembic_env() -> dict[str, str]:
@@ -42,11 +47,11 @@ def test_alembic_heads_is_exactly_one() -> None:
         for line in result.stdout.splitlines()
         if line.strip() and not line.strip().startswith("FAILED")
     ]
-    revision_lines = [line for line in heads if REVISION in line or "head" in line.lower()]
+    revision_lines = [line for line in heads if "head" in line.lower() or CURRENT_HEAD in line]
     assert len(revision_lines) == 1, (
-        f"Expected a single Alembic head containing {REVISION}, got:\n{result.stdout}"
+        f"Expected a single Alembic head containing {CURRENT_HEAD}, got:\n{result.stdout}"
     )
-    assert REVISION in revision_lines[0]
+    assert CURRENT_HEAD in revision_lines[0]
 
 
 def test_migration_0011_revises_venue_organizations() -> None:
@@ -69,13 +74,13 @@ def test_upgrade_when_database_available() -> None:
     if current.returncode != 0:
         pytest.skip(f"Alembic cannot read current revision: {current.stderr}")
 
-    up = _run_alembic("upgrade", REVISION)
+    up = _run_alembic("upgrade", CURRENT_HEAD)
     if up.returncode != 0:
         pytest.skip(f"Database unavailable for upgrade: {up.stderr or up.stdout}")
 
     after_up = _run_alembic("current")
     assert after_up.returncode == 0, after_up.stderr
-    assert REVISION in after_up.stdout
+    assert CURRENT_HEAD in after_up.stdout
 
     if os.getenv("SOCIETE_TEST_MIGRATION_ROUNDTRIP") != "1":
         pytest.skip(
@@ -83,7 +88,6 @@ def test_upgrade_when_database_available() -> None:
             "downgrade/upgrade round-trip for 0011_stories_official_content."
         )
 
-    # Capture Live Vibe / purpose counts before downgrade.
     before = _purpose_and_vibe_counts()
     assert before is not None
 
@@ -104,6 +108,7 @@ def test_upgrade_when_database_available() -> None:
     assert after["venue_owned"] == before["venue_owned"]
     assert after["live_vibes_rows"] == before["live_vibes_rows"]
     assert after["violations"] == 0
+    _run_alembic("upgrade", CURRENT_HEAD)
 
 
 def _purpose_and_vibe_counts() -> dict[str, int] | None:

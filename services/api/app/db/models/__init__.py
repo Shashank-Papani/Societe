@@ -16,6 +16,12 @@ from app.db.models.media import (
     ModerationSignal,
 )
 from app.db.models.messaging import Conversation, ConversationMember, Message
+from app.db.models.notification import (
+    Notification,
+    NotificationDelivery,
+    NotificationEventConsumption,
+    NotificationPreference,
+)
 from app.db.models.organization import (
     Organization,
     OrganizationInvitation,
@@ -46,6 +52,10 @@ __all__ = [
     "Message",
     "ModerationCase",
     "ModerationSignal",
+    "Notification",
+    "NotificationDelivery",
+    "NotificationEventConsumption",
+    "NotificationPreference",
     "OfficialVenuePost",
     "Organization",
     "OrganizationInvitation",

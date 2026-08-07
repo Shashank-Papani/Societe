@@ -401,6 +401,22 @@ class ClaimService:
             target_id=claim.id,
             metadata={"reason_length": len(claim.rejection_reason)},
         )
+        self._emit(
+            aggregate_type="venue_claim",
+            aggregate_id=claim.id,
+            event_type="venue.claim.rejected",
+            occurred_at=now,
+            payload={
+                "claim_id": str(claim.id),
+                "venue_id": str(claim.venue_id),
+                "claimant_user_id": str(claim.claimant_user_id),
+                **(
+                    {"organization_id": str(claim.claimant_organization_id)}
+                    if claim.claimant_organization_id is not None
+                    else {}
+                ),
+            },
+        )
         await self._session.commit()
         return self._public(claim)
 

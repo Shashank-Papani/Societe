@@ -134,6 +134,22 @@ async def reject_content_for_media_asset(
     if story_row is not None:
         if story_row.publication_status not in {"rejected", "deleted"}:
             mark_rejected(story_row, now=now)
+            session.add(
+                OutboxEvent(
+                    aggregate_type="story",
+                    aggregate_id=story_row.id,
+                    event_type="story.rejected",
+                    payload={
+                        "story_id": str(story_row.id),
+                        "venue_id": str(story_row.venue_id),
+                        "media_asset_id": str(media_asset_id),
+                        "author_type": story_row.author_type,
+                        "rejected_at": now.isoformat(),
+                    },
+                    occurred_at=now,
+                    available_at=now,
+                )
+            )
         return True
 
     post = await session.execute(

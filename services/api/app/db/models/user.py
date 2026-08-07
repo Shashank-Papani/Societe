@@ -3,7 +3,17 @@ from __future__ import annotations
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Text, UniqueConstraint, func, text
+from sqlalchemy import (
+    Boolean,
+    Date,
+    DateTime,
+    ForeignKey,
+    Integer,
+    Text,
+    UniqueConstraint,
+    func,
+    text,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -101,6 +111,14 @@ class UserDevice(Base):
     attestation_status: Mapped[str] = mapped_column(Text, nullable=False, server_default="unknown")
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    push_provider: Mapped[str | None] = mapped_column(Text)
+    push_token_hash: Mapped[str | None] = mapped_column(Text)
+    push_token_suffix: Mapped[str | None] = mapped_column(Text)
+    push_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    push_last_registered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    push_last_success_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    push_invalidated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    push_failure_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

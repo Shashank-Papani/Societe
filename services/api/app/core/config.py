@@ -181,6 +181,11 @@ class Settings(BaseSettings):
     event_dispatcher_retry_backoff_seconds: int = 5
     event_dispatcher_heartbeat_path: str = "/tmp/societe-event-dispatcher.heartbeat"
     event_dispatcher_heartbeat_max_age_seconds: int = 120
+    notification_realtime_ticket_ttl_seconds: int = 60
+    notification_ws_auth_timeout_seconds: float = 5.0
+    notification_ws_max_connections_per_user: int = 5
+    notification_delivery_batch_size: int = 20
+    notification_inbox_page_max: int = 50
 
     otel_enabled: bool = False
     otel_service_name: str = "societe-api"

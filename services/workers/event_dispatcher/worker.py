@@ -189,6 +189,11 @@ async def run_dispatch_cycle(settings: Settings) -> int:
         events = await claim_events(session, limit=settings.event_dispatcher_batch_size, now=now)
         for event in events:
             try:
+                from app.modules.notifications.projector import project_outbox_event
+
+                await project_outbox_event(
+                    session, event, redis=redis, settings=settings, now=now
+                )
                 await publish_event(
                     event,
                     realtime=realtime,
@@ -232,6 +237,27 @@ async def run_dispatch_cycle(settings: Settings) -> int:
                     aggregate_id=str(event.aggregate_id),
                 )
             handled += 1
+
+        # Drain pending push deliveries in the same worker cycle.
+        try:
+            from app.modules.notifications.push import (
+                build_push_provider,
+                claim_deliveries,
+                process_delivery,
+            )
+
+            provider = build_push_provider(settings)
+            deliveries = await claim_deliveries(
+                session,
+                limit=settings.notification_delivery_batch_size,
+                now=now,
+                owner=worker_identity(),
+            )
+            for delivery in deliveries:
+                await process_delivery(session, delivery, provider=provider, now=now)
+        except Exception as exc:
+            logger.warning("notification_delivery_cycle_failed", error=str(exc))
+
         await session.commit()
     return handled
 
